@@ -34,13 +34,18 @@ def main() -> None:
                     value=model_options[0]
                 )
                 load_button = gr.Button("Load")
-                model_structure = gr.Textbox(label="Model Structure", interactive=False)
-                dataset_structure = gr.Textbox(label="Dataset Structure", interactive=False)
-
+                load_output = gr.JSON(label="Load Output")
                 load_button.click(
                     fn=system.load,
                     inputs=[model_dropdown, dataset_dropdown],
-                    outputs=[dataset_structure, model_structure],
+                    outputs=load_output
+                )
+                evaluate_button = gr.Button("Evaluate")
+                evaluate_output = gr.Label(label="Accuracy")
+                evaluate_button.click(
+                    fn=system.evaluate,
+                    inputs=[],
+                    outputs=evaluate_output,
                 )
 
             with gr.Column():
@@ -54,6 +59,7 @@ def main() -> None:
                     inputs=[text, image],
                     outputs=output_text,
                 )
+
     interface.launch(share=True)
 
 if __name__ == "__main__":
