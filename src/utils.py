@@ -9,7 +9,7 @@ import pandas as pd
 from PIL.Image import Image
 from tqdm.auto import tqdm
 from huggingface_hub import login
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 
@@ -23,15 +23,18 @@ class MultimodalSystem:
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
         self.model_name_or_path = None
         self.dataset_name_or_path = None
-        self.model_settings = {
+        self.model_config = {
             "llava-hf/llava-1.5-7b-hf": {"attn_implementation": "flash_attention_2"},
             "llava-hf/llava-v1.6-mistral-7b-hf": {"attn_implementation": "flash_attention_2"},
             "Qwen/Qwen2-VL-7B-Instruct": {"attn_implementation": "flash_attention_2"},
         }
-        self.processor_settings = {
+        self.processor_config = {
             "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
         }
-
+        self.dataset_config = {
+            "m-a-p/CII-Bench": "test",
+            "Lin-Chen/MMStar": "val"
+        }
         print(self.load(model_name_or_path, dataset_name_or_path).to_string(index=False))
 
     def load(self, model_name_or_path: str, dataset_name_or_path: str) -> dict:
@@ -42,20 +45,23 @@ class MultimodalSystem:
 
             self.processor = AutoProcessor.from_pretrained(
                 self.model_name_or_path, trust_remote_code=True,
-                **self.processor_settings.get(self.model_name_or_path, {})
+                **self.processor_config.get(self.model_name_or_path, {})
             )
             self.model = AutoModelForImageTextToText.from_pretrained(
                 self.model_name_or_path,
                 trust_remote_code=True,
                 device_map="auto",
                 torch_dtype="auto",
-                **self.model_settings.get(self.model_name_or_path, {})
+                **self.model_config.get(self.model_name_or_path, {})
             )
             self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
         if dataset_name_or_path != self.dataset_name_or_path:
             self.dataset_name_or_path = dataset_name_or_path
-            self.dataset = load_dataset(self.dataset_name_or_path, split="test")
+            self.dataset = load_dataset(
+                self.dataset_name_or_path,
+                split=self.dataset_config[self.dataset_name_or_path]
+            )
 
         tensor_type = next(self.model.parameters()).dtype
         total_params = sum(p.numel() for p in self.model.parameters())
@@ -101,42 +107,42 @@ class MultimodalSystem:
 
     def evaluate(self, batch_size: int = 1) -> float:
         """evaluate"""
-        dataset = []
-
-        if self.dataset_name_or_path == "m-a-p/CII-Bench":
-            def format_question(example):
-                option_labels = ["A", "B", "C", "D", "E", "F"]
-                options = "\n".join([
-                    f"({option_labels[i]}) {example[f'option{i + 1}']}"
-                    for i in range(6) if example.get(f"option{i + 1}")
-                ])
-                example["input"] = (
-                    "请根据提供的图片尝试回答下面的单选题。直接回答正确选项，不要包含额外的解释。"
-                    "请使用以下格式：“答案：$LETTER”，其中$LETTER是你认为正确答案的字母。\n"
-                   f"{example['question']}\n"
-                   f"{options}\n"
-                    "答案：\n"
-                )
-                return example
-            dataset = self.dataset.map(format_question)
-
         correct = 0
         results = []
-        total_examples = len(dataset)
+        total_examples = len(self.dataset)
+        dataset = self.dataset.map(self._format_question)
+
         for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
             end_idx = min(start_idx + batch_size, total_examples)
             batch = dataset.select(range(start_idx, end_idx))
-            predictions = self.generate(batch["input"], batch["image"])
-            correct += self._count_correct(predictions, batch["answer"])
+
+            generations = self.generate(batch["question"], batch["image"])
+            correct += self._count_correct(generations, batch["answer"])
             results.extend([
-                {"input": inp, "prediction": pred, "answer": ans}
-                for inp, pred, ans in zip(batch["input"], predictions, batch["answer"])
+                {"question": q, "generation": g, "answer": a}
+                for q, g, a in zip(batch["question"], generations, batch["answer"])
             ])
 
-        with open(f"{self.model_name_or_path.split("/")[-1]}.json", "w", encoding="utf-8") as file:
+        model_name = self.model_name_or_path.split("/")[-1]
+        dataset_name = self.dataset_name_or_path.split("/")[-1]
+        with open( f"{dataset_name}_{model_name}.json", "w", encoding="utf-8") as file:
             json.dump(results, file, ensure_ascii=False, indent=4)
 
-        return correct / total_examples
+        return correct / len(self.dataset)
+
+    def _format_question(self, example: Dataset) -> Dataset:
+        if self.dataset_name_or_path == "m-a-p/CII-Bench":
+            option_labels = ["A", "B", "C", "D", "E", "F"]
+            options = "\n".join(
+                f"({option_labels[i]}) {example[f'option{i + 1}']}"
+                for i in range(6)
+            )
+            example["question"] = (
+                "请根据提供的图片尝试回答下面的单选题。直接回答正确选项，不要包含额外的解释。\n"
+                "请使用以下格式：“答案：$LETTER”，其中$LETTER是你认为正确答案的字母。\n"
+                f"{example['question']}\n{options}\n答案：\n"
+            )
+        return example
 
     def _clear_resources(self) -> None:
         if hasattr(self, "model"):
@@ -146,10 +152,10 @@ class MultimodalSystem:
         torch.cuda.empty_cache()
         gc.collect()
 
-    def _count_correct(self, predictions: list, answers: list) -> float:
+    def _count_correct(self, generations: list, answers: list) -> float:
         return sum(
             1
-            for prediction, answer in zip(predictions, answers)
-            if (match := re.search(r"\(?([A-F])\)?", prediction))
+            for generation, answer in zip(generations, answers)
+            if (match := re.search(r"\(?([A-F])\)?", generation))
             and match.group(1).upper() == answer.upper()
         )

@@ -8,13 +8,14 @@ from src import MultimodalSystem
 def main() -> None:
     """main"""
     model_options = [
+        "llava-hf/llava-1.5-7b-hf",
         "llava-hf/llava-v1.6-mistral-7b-hf",
         "Qwen/Qwen2-VL-7B-Instruct",
         "meta-llama/Llama-3.2-11B-Vision-Instruct",
     ]
     dataset_options = [
         "m-a-p/CII-Bench",
-        "BAAI/CMMU",
+        "Lin-Chen/MMStar",
     ]
     system = MultimodalSystem(model_options[0], dataset_options[0])
 
@@ -34,7 +35,7 @@ def main() -> None:
                     value=model_options[0]
                 )
                 load_button = gr.Button("Load")
-                load_output = gr.JSON(label="Load Output")
+                load_output = gr.Dataframe(label="Load")
                 load_button.click(
                     fn=system.load,
                     inputs=[model_dropdown, dataset_dropdown],
@@ -52,12 +53,11 @@ def main() -> None:
                 image = gr.Image(label="Image")
                 text = gr.Textbox(label="Text Input", lines=2)
                 generate_button = gr.Button("Generate")
-                output_text = gr.Textbox(label="Generated Response")
-
+                generation = gr.Textbox(label="Generation")
                 generate_button.click(
                     fn=system.generate,
                     inputs=[text, image],
-                    outputs=output_text,
+                    outputs=generation,
                 )
 
     interface.launch(share=True)
