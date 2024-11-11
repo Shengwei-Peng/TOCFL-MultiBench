@@ -24,7 +24,6 @@ def collect(
 
     image_id = len(records) + 1
     image_path = images_dir / f"{image_id}.png"
-
     image_path.write_bytes(Path(image).read_bytes())
 
     data = {
@@ -125,8 +124,6 @@ def main() -> None:
             inputs=[],
             outputs=outputs
         )
-
-
 
     demo.launch(share=True)
 
