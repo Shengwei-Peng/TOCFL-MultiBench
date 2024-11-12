@@ -13,14 +13,19 @@ audio_dir.mkdir(parents=True, exist_ok=True)
 
 def collect(
     image: str, audio: str, question: str, answer: str,
-    option1: str, option2: str, option3: str, option4: str
+    option1: str, option2: str, option3: str, option4: str,
+    edition: str, test_type: str, level: str, part: str, sequence: int
 ) -> list:
     """collect"""
     if not json_file_path.exists():
         json_file_path.write_text(json.dumps([]))
 
     records = json.loads(json_file_path.read_text())
-    record_id = len(records) + 1
+
+    if sequence is None or sequence <= 0:
+        sequence = len(records) + 1
+
+    record_id = generate_id(edition, test_type, level, part, sequence)
 
     image_path = None
     if image:
@@ -37,7 +42,7 @@ def collect(
         "image_path": str(image_path) if image_path else None,
         "audio_path": str(audio_path) if audio_path else None,
         "question": question.strip(),
-        "answer": answer.strip(),
+        "answer": answer.strip().upper(),
         "option1": option1.strip(),
         "option2": option2.strip(),
         "option3": option3.strip(),
@@ -63,7 +68,7 @@ def convert_to_list_format(records: list) -> list:
 
 def clear_inputs()-> None:
     """clear_inputs"""
-    return None, None, "", "", "", "", "", ""
+    return None, None, "", "", "", "", "", "", None, None, None, None, None
 
 def delete_last_entry()-> None:
     """delete_last_entry"""
@@ -95,40 +100,78 @@ def load_existing_data():
         return convert_to_list_format(records)
     return []
 
+def generate_id(edition: str, test_type: str, level: str, part: str, sequence: int) -> str:
+    """generate_id"""
+    edition_mapping = {"第一輯": "01", "第二輯": "02", "第三輯": "03", "第四輯": "04", "第五輯": "05"}
+    test_type_mapping = {"聽力測驗": "L", "閱讀測驗": "R"}
+    level_mapping = {
+        "準備級 Novice": "N", "入門基礎級 Band A": "A", "進階高階級 Band B": "B", "流利精通級 Band C": "C"
+    }
+    part_mapping = {"第一部分": "P1", "第二部分": "P2", "第三部分": "P3", "第四部分": "P4", "第五部分": "P5"}
+
+    edition_code = edition_mapping.get(edition, "00")
+    test_type_code = test_type_mapping.get(test_type, "X")
+    level_code = level_mapping.get(level, "X")
+    part_code = part_mapping.get(part, "P0")
+    sequence_code = f"{sequence:03d}"
+
+    return f"{edition_code}-{test_type_code}-{level_code}-{part_code}-{sequence_code}"
+
 def main() -> None:
     """main"""
     existing_data = load_existing_data()
 
     with gr.Blocks() as interface:
         with gr.Row():
-            with gr.Column():
+            with gr.Column(scale=1):
                 image_input = gr.Image(label="Upload Image", type="filepath")
                 audio_input = gr.Audio(label="Upload Audio", type="filepath")
-
-            with gr.Column():
+            with gr.Column(scale=1):
+                edition_input = gr.Dropdown(
+                    choices=["第一輯", "第二輯", "第三輯", "第四輯", "第五輯"],
+                    label="Select Edition"
+                )
+                test_type_input = gr.Dropdown(
+                    choices=["聽力測驗", "閱讀測驗"],
+                    label="Select Test Type"
+                )
+                level_input = gr.Dropdown(
+                    choices=["準備級", "入門基礎級", "進階高階級", "流利精通級"],
+                    label="Select Level"
+                )
+                part_input = gr.Dropdown(
+                    choices=["第一部分", "第二部分", "第三部分", "第四部分", "第五部分"],
+                    label="Select Part"
+                )
+                sequence_input = gr.Number(label="Enter Sequence Number", precision=0)
+            with gr.Column(scale=1):
                 question_input = gr.Textbox(label="Enter Question")
                 answer_input = gr.Textbox(label="Enter Answer")
                 option1_input = gr.Textbox(label="Option 1")
                 option2_input = gr.Textbox(label="Option 2")
                 option3_input = gr.Textbox(label="Option 3")
                 option4_input = gr.Textbox(label="Option 4")
-                submit_button = gr.Button("Submit")
-                clear_button = gr.Button("Clear")
-                delete_last_button = gr.Button("Delete Last Entry")
 
-            outputs = gr.Dataframe(
-                headers=[
-                    "ID", "Image Path", "Audio Path", "Question", "Answer",
-                    "Option 1", "Option 2", "Option 3", "Option 4"
-                ],
-                value=existing_data
-            )
+        with gr.Row():
+            clear_button = gr.Button("Clear")
+            delete_last_button = gr.Button("Delete Last Entry")
+            submit_button = gr.Button("Submit")
+
+        outputs = gr.Dataframe(
+            headers=[
+                "ID", "Image Path", "Audio Path", "Question", "Answer",
+                "Option 1", "Option 2", "Option 3", "Option 4"
+            ],
+            value=existing_data
+        )
 
         submit_button.click(
             fn=collect,
             inputs=[
                 image_input, audio_input, question_input, answer_input,
-                option1_input, option2_input, option3_input, option4_input
+                option1_input, option2_input, option3_input, option4_input,
+                edition_input, test_type_input, level_input, part_input,
+                sequence_input
             ],
             outputs=outputs
         )
@@ -137,7 +180,9 @@ def main() -> None:
             inputs=[],
             outputs=[
                 image_input, audio_input, question_input, answer_input,
-                option1_input, option2_input, option3_input, option4_input
+                option1_input, option2_input, option3_input, option4_input,
+                edition_input, test_type_input, level_input, part_input,
+                sequence_input
             ]
         )
         delete_last_button.click(
