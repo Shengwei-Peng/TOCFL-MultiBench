@@ -136,7 +136,7 @@ def main() -> None:
                     label="Select Test Type"
                 )
                 level_input = gr.Dropdown(
-                    choices=["準備級", "入門基礎級", "進階高階級", "流利精通級"],
+                    choices=["準備級 Novice", "入門基礎級 Band A", "進階高階級 Band B", "流利精通級 Band C"],
                     label="Select Level"
                 )
                 part_input = gr.Dropdown(
