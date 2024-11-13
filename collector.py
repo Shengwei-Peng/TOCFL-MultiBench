@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import gradio as gr
+from pydub import AudioSegment
 
 base_dir = Path("dataset")
 json_file_path = base_dir / "dataset.json"
@@ -10,17 +11,16 @@ images_dir = base_dir / "images"
 audio_dir = base_dir / "audio"
 images_dir.mkdir(parents=True, exist_ok=True)
 audio_dir.mkdir(parents=True, exist_ok=True)
+if not json_file_path.exists():
+    json_file_path.write_text(json.dumps([]), encoding="utf-8")
 
 def collect(
-    image: str, audio: str, question: str, answer: str,
+    image: str, audio_file1: str, audio_file2: str, question: str, answer: str,
     option1: str, option2: str, option3: str, option4: str,
     edition: str, test_type: str, level: str, part: str, sequence: int
 ) -> list:
     """collect"""
-    if not json_file_path.exists():
-        json_file_path.write_text(json.dumps([]))
-
-    records = json.loads(json_file_path.read_text())
+    records = json.loads(json_file_path.read_text(encoding="utf-8"))
 
     if sequence is None or sequence <= 0:
         sequence = len(records) + 1
@@ -33,9 +33,9 @@ def collect(
         image_path.write_bytes(Path(image).read_bytes())
 
     audio_path = None
-    if audio:
+    if audio_file1 or audio_file2:
         audio_path = audio_dir / f"{record_id}.mp3"
-        audio_path.write_bytes(Path(audio).read_bytes())
+        merge_audio_files(audio_file1, audio_file2, audio_path)
 
     data = {
         "id": record_id,
@@ -51,7 +51,10 @@ def collect(
 
     records.append(data)
 
-    json_file_path.write_text(json.dumps(records, indent=4, ensure_ascii=False))
+    json_file_path.write_text(
+        json.dumps(records, indent=4, ensure_ascii=False),
+        encoding="utf-8"
+    )
 
     return convert_to_list_format(records)
 
@@ -68,11 +71,11 @@ def convert_to_list_format(records: list) -> list:
 
 def clear_inputs()-> None:
     """clear_inputs"""
-    return None, None, "", "", "", "", "", "", None, None, None, None, None
+    return None, None, None, "", "", "", "", "", "", None, None, None, None, None
 
 def delete_last_entry()-> None:
     """delete_last_entry"""
-    records = json.loads(json_file_path.read_text())
+    records = json.loads(json_file_path.read_text(encoding="utf-8"))
     if records:
         last_record = records.pop()
 
@@ -88,7 +91,10 @@ def delete_last_entry()-> None:
             if audio_path_obj.exists():
                 audio_path_obj.unlink()
 
-        json_file_path.write_text(json.dumps(records, indent=4, ensure_ascii=False))
+        json_file_path.write_text(
+            json.dumps(records, indent=4, ensure_ascii=False),
+            encoding="utf-8"
+        )
 
     return convert_to_list_format(records)
 
@@ -117,6 +123,15 @@ def generate_id(edition: str, test_type: str, level: str, part: str, sequence: i
 
     return f"{edition_code}-{test_type_code}-{level_code}-{part_code}-{sequence_code}"
 
+def merge_audio_files(audio_file1: str, audio_file2: str, output_path: str) -> None:
+    """merge_audio_files"""
+    combined_audio = AudioSegment.empty()
+    if audio_file1:
+        combined_audio += AudioSegment.from_file(audio_file1)
+    if audio_file2:
+        combined_audio += AudioSegment.from_file(audio_file2)
+    combined_audio.export(output_path, format="mp3")
+
 def main() -> None:
     """main"""
     existing_data = load_existing_data()
@@ -125,7 +140,9 @@ def main() -> None:
         with gr.Row():
             with gr.Column(scale=1):
                 image_input = gr.Image(label="Upload Image", type="filepath")
-                audio_input = gr.Audio(label="Upload Audio", type="filepath")
+                audio_input1 = gr.Audio(label="Upload Audio File 1", type="filepath")
+                audio_input2 = gr.Audio(label="Upload Audio File 2", type="filepath")
+
             with gr.Column(scale=1):
                 edition_input = gr.Dropdown(
                     choices=["第一輯", "第二輯", "第三輯", "第四輯", "第五輯"],
@@ -143,7 +160,8 @@ def main() -> None:
                     choices=["第一部分", "第二部分", "第三部分", "第四部分", "第五部分"],
                     label="Select Part"
                 )
-                sequence_input = gr.Number(label="Enter Sequence Number", precision=0)
+                sequence_input = gr.Number(label="Enter Question Number", precision=0)
+
             with gr.Column(scale=1):
                 question_input = gr.Textbox(label="Enter Question")
                 answer_input = gr.Textbox(label="Enter Answer")
@@ -168,7 +186,7 @@ def main() -> None:
         submit_button.click(
             fn=collect,
             inputs=[
-                image_input, audio_input, question_input, answer_input,
+                image_input, audio_input1, audio_input2, question_input, answer_input,
                 option1_input, option2_input, option3_input, option4_input,
                 edition_input, test_type_input, level_input, part_input,
                 sequence_input
@@ -179,7 +197,7 @@ def main() -> None:
             fn=clear_inputs,
             inputs=[],
             outputs=[
-                image_input, audio_input, question_input, answer_input,
+                image_input, audio_input1, audio_input2, question_input, answer_input,
                 option1_input, option2_input, option3_input, option4_input,
                 edition_input, test_type_input, level_input, part_input,
                 sequence_input
