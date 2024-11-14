@@ -50,13 +50,14 @@ def main() -> None:
                 )
 
             with gr.Column():
+                audio = gr.Audio(label="Audio", type="filepath")
                 image = gr.Image(label="Image")
                 text = gr.Textbox(label="Text Input", lines=2)
                 generate_button = gr.Button("Generate")
                 generation = gr.Textbox(label="Generation")
                 generate_button.click(
                     fn=system.generate,
-                    inputs=[text, image],
+                    inputs=[text, image, audio],
                     outputs=generation,
                 )
 

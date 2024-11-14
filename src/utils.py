@@ -10,7 +10,7 @@ from PIL.Image import Image
 from tqdm.auto import tqdm
 from huggingface_hub import login
 from datasets import load_dataset, Dataset
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText, pipeline
 
 
 class MultimodalSystem:
@@ -36,6 +36,12 @@ class MultimodalSystem:
             "Lin-Chen/MMStar": "val"
         }
         print(self.load(model_name_or_path, dataset_name_or_path).to_string(index=False))
+        self.asr_model = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-large-v3",
+            device_map="auto",
+            torch_dtype="auto",
+        )
 
     def load(self, model_name_or_path: str, dataset_name_or_path: str) -> dict:
         """load"""
@@ -74,12 +80,31 @@ class MultimodalSystem:
             }
         )
 
-    def generate(self, texts: list | str, images: list | Image) -> list | str:
+    def generate(
+        self,
+        texts: list | str,
+        images: list | Image = None,
+        audios: list | str = None
+    ) -> list | str:
         """generate"""
         is_batch = isinstance(texts, list)
         if not is_batch:
             texts = [texts]
-            images = [images]
+            images = [images] if images else [None]
+            audios = [audios] if audios else None
+
+        if audios:
+            audio_texts = []
+            for audio_path in audios:
+                transcription = self.asr_model(audio_path, return_timestamps=True)
+                audio_texts.append(
+                    "".join([segment['text'] for segment in transcription["chunks"]])
+                )
+
+            texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
+
+        dummy_image = torch.zeros((3, 224, 224))
+        processed_images = [img if img is not None else dummy_image for img in images]
 
         conversations = [
             [
@@ -91,12 +116,14 @@ class MultimodalSystem:
             self.processor.apply_chat_template(conv, add_generation_prompt=True)
             for conv in conversations
         ]
-
         inputs = self.processor(
-            text=prompts, images=images, return_tensors="pt", padding=True
+            text=prompts,
+            images=processed_images,
+            return_tensors="pt",
+            padding=True
         ).to(self.model.device)
 
-        generated_ids = self.model.generate(**inputs, max_new_tokens=20)
+        generated_ids = self.model.generate(**inputs, max_new_tokens=128)
         decoded_outputs = [
         self.processor.decode(
                 generated_ids[i][len(inputs.input_ids[i]):], skip_special_tokens=True)
