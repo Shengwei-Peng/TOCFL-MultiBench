@@ -14,6 +14,7 @@ def main() -> None:
         "meta-llama/Llama-3.2-11B-Vision-Instruct",
     ]
     dataset_options = [
+        "dataset/dataset.json",
         "m-a-p/CII-Bench",
         "Lin-Chen/MMStar",
     ]

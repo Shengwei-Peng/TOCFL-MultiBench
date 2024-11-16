@@ -48,7 +48,6 @@ class MultimodalSystem:
         if model_name_or_path != self.model_name_or_path:
             self._clear_resources()
             self.model_name_or_path = model_name_or_path
-
             self.processor = AutoProcessor.from_pretrained(
                 self.model_name_or_path, trust_remote_code=True,
                 **self.processor_config.get(self.model_name_or_path, {})
@@ -64,10 +63,15 @@ class MultimodalSystem:
 
         if dataset_name_or_path != self.dataset_name_or_path:
             self.dataset_name_or_path = dataset_name_or_path
-            self.dataset = load_dataset(
-                self.dataset_name_or_path,
-                split=self.dataset_config[self.dataset_name_or_path]
-            )
+            if self.dataset_name_or_path == "dataset/dataset.json":
+                self.dataset = load_dataset(
+                    "json", data_files=self.dataset_name_or_path, split="train"
+                )
+            else:
+                self.dataset = load_dataset(
+                    self.dataset_name_or_path,
+                    split=self.dataset_config[self.dataset_name_or_path]
+                )
 
         tensor_type = next(self.model.parameters()).dtype
         total_params = sum(p.numel() for p in self.model.parameters())
@@ -93,14 +97,13 @@ class MultimodalSystem:
             images = [images] if images else [None]
             audios = [audios] if audios else None
 
-        if audios:
+        if audios and any(audio is not None for audio in audios):
             audio_texts = []
-            for audio_path in audios:
-                transcription = self.asr_model(audio_path, return_timestamps=True)
+            for audio in audios:
+                transcription = self.asr_model(audio, return_timestamps=True)
                 audio_texts.append(
                     "".join([segment['text'] for segment in transcription["chunks"]])
                 )
-
             texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
 
         dummy_image = torch.zeros((3, 224, 224))
@@ -143,7 +146,8 @@ class MultimodalSystem:
             end_idx = min(start_idx + batch_size, total_examples)
             batch = dataset.select(range(start_idx, end_idx))
 
-            generations = self.generate(batch["question"], batch["image"])
+            generations = self.generate(batch["question"], batch["image"], batch["audio"])
+
             correct += self._count_correct(generations, batch["answer"])
             results.extend([
                 {"question": q, "generation": g, "answer": a}
@@ -158,7 +162,14 @@ class MultimodalSystem:
         return correct / len(self.dataset)
 
     def _format_question(self, example: Dataset) -> Dataset:
-        if self.dataset_name_or_path == "m-a-p/CII-Bench":
+        if self.dataset_name_or_path == "dataset/dataset.json":
+            options = "\n".join(
+                f"{example[f'option{i + 1}']}"
+                for i in range(4)
+            )
+            example["question"] = f"{example['question']}\n{options}\n答案：\n"
+
+        elif self.dataset_name_or_path == "m-a-p/CII-Bench":
             option_labels = ["A", "B", "C", "D", "E", "F"]
             options = "\n".join(
                 f"({option_labels[i]}) {example[f'option{i + 1}']}"
@@ -169,6 +180,11 @@ class MultimodalSystem:
                 "请使用以下格式：“答案：$LETTER”，其中$LETTER是你认为正确答案的字母。\n"
                 f"{example['question']}\n{options}\n答案：\n"
             )
+            example["audio"] = None
+
+        elif self.dataset_name_or_path == "Lin-Chen/MMStar":
+            example["audio"] = None
+
         return example
 
     def _clear_resources(self) -> None:
