@@ -39,8 +39,8 @@ def collect(
 
     data = {
         "id": record_id,
-        "image_path": str(image_path) if image_path else None,
-        "audio_path": str(audio_path) if audio_path else None,
+        "image": str(image_path) if image_path else None,
+        "audio": str(audio_path) if audio_path else None,
         "question": question.strip(),
         "answer": answer.strip().upper(),
         "option1": option1.strip(),
@@ -62,7 +62,7 @@ def convert_to_list_format(records: list) -> list:
     """convert_to_list_format"""
     return [
         [
-            rec["id"], rec.get("image_path"), rec.get("audio_path"),
+            rec["id"], rec.get("image"), rec.get("audio"),
             rec["question"], rec["answer"],
             rec["option1"], rec["option2"], rec["option3"], rec["option4"]
         ]
@@ -79,13 +79,13 @@ def delete_last_entry()-> None:
     if records:
         last_record = records.pop()
 
-        image_path = last_record.get("image_path")
+        image_path = last_record.get("image")
         if image_path:
             image_path_obj = Path(image_path)
             if image_path_obj.exists():
                 image_path_obj.unlink()
 
-        audio_path = last_record.get("audio_path")
+        audio_path = last_record.get("audio")
         if audio_path:
             audio_path_obj = Path(audio_path)
             if audio_path_obj.exists():
@@ -177,7 +177,7 @@ def main() -> None:
 
         outputs = gr.Dataframe(
             headers=[
-                "ID", "Image Path", "Audio Path", "Question", "Answer",
+                "ID", "Image", "Audio", "Question", "Answer",
                 "Option 1", "Option 2", "Option 3", "Option 4"
             ],
             value=existing_data
