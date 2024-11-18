@@ -15,8 +15,8 @@ if not json_file_path.exists():
     json_file_path.write_text(json.dumps([]), encoding="utf-8")
 
 def collect(
-    image: str, audio_file1: str, audio_file2: str, question: str, answer: str,
-    option1: str, option2: str, option3: str, option4: str,
+    image: str, audio_file1: str, audio_file2: str, instruction: str, question: str,
+    option1: str, option2: str, option3: str, option4: str, answer: str,
     edition: str, test_type: str, level: str, part: str, sequence: int
 ) -> list:
     """collect"""
@@ -41,12 +41,13 @@ def collect(
         "id": record_id,
         "image": str(image_path) if image_path else None,
         "audio": str(audio_path) if audio_path else None,
+        "instruction": instruction.strip(),
         "question": question.strip(),
-        "answer": answer.strip().upper(),
         "option1": option1.strip(),
         "option2": option2.strip(),
         "option3": option3.strip(),
-        "option4": option4.strip()
+        "option4": option4.strip(),
+        "answer": answer.strip().upper(),
     }
 
     records.append(data)
@@ -62,9 +63,8 @@ def convert_to_list_format(records: list) -> list:
     """convert_to_list_format"""
     return [
         [
-            rec["id"], rec.get("image"), rec.get("audio"),
-            rec["question"], rec["answer"],
-            rec["option1"], rec["option2"], rec["option3"], rec["option4"]
+            rec["id"], rec["image"], rec["audio"], rec["instruction"], rec["question"], 
+            rec["option1"], rec["option2"], rec["option3"], rec["option4"], rec["answer"]
         ]
         for rec in records
     ]
@@ -163,12 +163,13 @@ def main() -> None:
                 sequence_input = gr.Number(label="Enter Question Number", precision=0)
 
             with gr.Column(scale=1):
-                question_input = gr.Textbox(label="Enter Question")
-                answer_input = gr.Textbox(label="Enter Answer")
+                instruction_input = gr.Textbox(label="Instruction")
+                question_input = gr.Textbox(label="Question")
                 option1_input = gr.Textbox(label="Option 1")
                 option2_input = gr.Textbox(label="Option 2")
                 option3_input = gr.Textbox(label="Option 3")
                 option4_input = gr.Textbox(label="Option 4")
+                answer_input = gr.Textbox(label="Answer")
 
         with gr.Row():
             clear_button = gr.Button("Clear")
@@ -177,17 +178,16 @@ def main() -> None:
 
         outputs = gr.Dataframe(
             headers=[
-                "ID", "Image", "Audio", "Question", "Answer",
-                "Option 1", "Option 2", "Option 3", "Option 4"
+                "ID", "Image", "Audio", "Instruction", "Question",
+                "Option 1", "Option 2", "Option 3", "Option 4", "Answer"
             ],
             value=existing_data
         )
-
         submit_button.click(
             fn=collect,
             inputs=[
-                image_input, audio_input1, audio_input2, question_input, answer_input,
-                option1_input, option2_input, option3_input, option4_input,
+                image_input, audio_input1, audio_input2, instruction_input, question_input,
+                option1_input, option2_input, option3_input, option4_input, answer_input,
                 edition_input, test_type_input, level_input, part_input,
                 sequence_input
             ],
@@ -197,8 +197,8 @@ def main() -> None:
             fn=clear_inputs,
             inputs=[],
             outputs=[
-                image_input, audio_input1, audio_input2, question_input, answer_input,
-                option1_input, option2_input, option3_input, option4_input,
+                image_input, audio_input1, audio_input2, instruction_input, question_input,
+                option1_input, option2_input, option3_input, option4_input, answer_input,
                 edition_input, test_type_input, level_input, part_input,
                 sequence_input
             ]
