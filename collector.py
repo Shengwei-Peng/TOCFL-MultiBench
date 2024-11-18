@@ -41,12 +41,12 @@ def collect(
         "id": record_id,
         "image": str(image_path) if image_path else None,
         "audio": str(audio_path) if audio_path else None,
-        "instruction": instruction.strip(),
-        "question": question.strip(),
-        "option1": option1.strip(),
-        "option2": option2.strip(),
-        "option3": option3.strip(),
-        "option4": option4.strip(),
+        "instruction": instruction.strip().replace("(", "（").replace(")", "）"),
+        "question": question.strip().replace("(", "（").replace(")", "）"),
+        "option1": option1.strip().replace("(", "（").replace(")", "）"),
+        "option2": option2.strip().replace("(", "（").replace(")", "）"),
+        "option3": option3.strip().replace("(", "（").replace(")", "）"),
+        "option4": option4.strip().replace("(", "（").replace(")", "）"),
         "answer": answer.strip().upper(),
     }
 
