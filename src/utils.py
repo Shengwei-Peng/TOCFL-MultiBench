@@ -10,7 +10,7 @@ from PIL.Image import Image
 from tqdm.auto import tqdm
 from huggingface_hub import login
 from datasets import load_dataset, Dataset
-from transformers import AutoProcessor, AutoModelForImageTextToText, pipeline
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig, pipeline
 
 
 class MultimodalSystem:
@@ -18,16 +18,13 @@ class MultimodalSystem:
     def __init__(
         self, model_name_or_path: str,
         dataset_name_or_path: str,
+        tensor_type: str,
     ) -> None:
         """__init__"""
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
-        self.model_name_or_path = None
-        self.dataset_name_or_path = None
-        self.model_config = {
-            "llava-hf/llava-1.5-7b-hf": {"attn_implementation": "flash_attention_2"},
-            "llava-hf/llava-v1.6-mistral-7b-hf": {"attn_implementation": "flash_attention_2"},
-            "Qwen/Qwen2-VL-7B-Instruct": {"attn_implementation": "flash_attention_2"},
-        }
+        self.tensor_type = ""
+        self.model_name_or_path = ""
+        self.dataset_name_or_path = ""
         self.processor_config = {
             "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
         }
@@ -35,18 +32,21 @@ class MultimodalSystem:
             "m-a-p/CII-Bench": "test",
             "Lin-Chen/MMStar": "val"
         }
-        print(self.load(model_name_or_path, dataset_name_or_path).to_string(index=False))
+        print(
+            self.load(tensor_type, model_name_or_path, dataset_name_or_path).to_string(index=False)
+        )
         self.asr_model = pipeline(
             task="automatic-speech-recognition",
-            model="openai/whisper-large-v3",
+            model="openai/whisper-large-v3-turbo",
             device_map="auto",
             torch_dtype="auto",
         )
 
-    def load(self, model_name_or_path: str, dataset_name_or_path: str) -> dict:
+    def load(self, tensor_type: str, model_name_or_path: str, dataset_name_or_path: str) -> dict:
         """load"""
-        if model_name_or_path != self.model_name_or_path:
+        if model_name_or_path != self.model_name_or_path or tensor_type != self.tensor_type:
             self._clear_resources()
+            self.tensor_type = tensor_type
             self.model_name_or_path = model_name_or_path
             self.processor = AutoProcessor.from_pretrained(
                 self.model_name_or_path, trust_remote_code=True,
@@ -56,8 +56,7 @@ class MultimodalSystem:
                 self.model_name_or_path,
                 trust_remote_code=True,
                 device_map="auto",
-                torch_dtype="auto",
-                **self.model_config.get(self.model_name_or_path, {})
+                **self._get_model_config(self.model_name_or_path, tensor_type)
             )
             self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
@@ -94,8 +93,8 @@ class MultimodalSystem:
         is_batch = isinstance(texts, list)
         if not is_batch:
             texts = [texts]
-            images = [images] if images else [None]
-            audios = [audios] if audios else None
+            images = [images] if images is not None else [None]
+            audios = [audios] if audios is not None else [None]
 
         if audios and any(audio is not None for audio in audios):
             audio_texts = []
@@ -202,3 +201,22 @@ class MultimodalSystem:
             if (match := re.search(r"\(?([A-F])\)?", generation))
             and match.group(1).upper() == answer.upper()
         )
+
+    def _get_model_config(self, model_name_or_path: str, tensor_type: str) -> dict:
+        model_config = {
+            "llava-hf/llava-1.5-7b-hf": {"attn_implementation": "flash_attention_2"},
+            "llava-hf/llava-v1.6-mistral-7b-hf": {"attn_implementation": "flash_attention_2"},
+            "Qwen/Qwen2-VL-7B-Instruct": {"attn_implementation": "flash_attention_2"},
+        }.get(model_name_or_path, {})
+
+        dtype_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16}
+        model_config["torch_dtype"] = dtype_mapping.get(tensor_type, "auto")
+
+        if tensor_type in {"int8", "fp4", "nf4"}:
+            model_config["quantization_config"] = BitsAndBytesConfig(**{
+                "load_in_8bit": tensor_type == "int8",
+                "load_in_4bit": tensor_type in {"fp4", "nf4"},
+                "bnb_4bit_quant_type": "nf4" if tensor_type == "nf4" else None
+            })
+
+        return model_config

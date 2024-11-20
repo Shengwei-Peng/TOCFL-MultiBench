@@ -14,11 +14,11 @@ def main() -> None:
         "meta-llama/Llama-3.2-11B-Vision-Instruct",
     ]
     dataset_options = [
-        "dataset/dataset.json",
         "m-a-p/CII-Bench",
         "Lin-Chen/MMStar",
     ]
-    system = MultimodalSystem(model_options[0], dataset_options[0])
+    tensor_type_options = ["auto", "fp16", "bf16", "int8", "fp4", "nf4"]
+    system = MultimodalSystem(model_options[0], dataset_options[0], tensor_type_options[-1])
 
     interface = gr.Blocks()
     with interface:
@@ -35,11 +35,16 @@ def main() -> None:
                     label="Select Model",
                     value=model_options[0]
                 )
+                tensor_type_dropdown = gr.Dropdown(
+                    choices=tensor_type_options,
+                    label="Select Tensor Type",
+                    value=tensor_type_options[-1]
+                )
                 load_button = gr.Button("Load")
                 load_output = gr.Dataframe(label="Load")
                 load_button.click(
                     fn=system.load,
-                    inputs=[model_dropdown, dataset_dropdown],
+                    inputs=[tensor_type_dropdown, model_dropdown, dataset_dropdown],
                     outputs=load_output
                 )
                 evaluate_button = gr.Button("Evaluate")
