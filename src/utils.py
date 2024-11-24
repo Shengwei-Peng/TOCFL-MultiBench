@@ -216,7 +216,7 @@ class MultimodalSystem:
             model_config["quantization_config"] = BitsAndBytesConfig(**{
                 "load_in_8bit": tensor_type == "int8",
                 "load_in_4bit": tensor_type in {"fp4", "nf4"},
-                "bnb_4bit_quant_type": "nf4" if tensor_type == "nf4" else None
+                "bnb_4bit_quant_type": "nf4" if tensor_type == "nf4" else "fp4"
             })
 
         return model_config
