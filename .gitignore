@@ -3,4 +3,4 @@ __pycache__/
 .gradio
 .env
 *test*
-dataset
+*data*
