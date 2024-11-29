@@ -29,6 +29,7 @@ class MultimodalSystem:
             "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
         }
         self.dataset_config = {
+            "dataset_v1": "train",
             "m-a-p/CII-Bench": "test",
             "Lin-Chen/MMStar": "val"
         }
@@ -161,14 +162,7 @@ class MultimodalSystem:
         return correct / len(self.dataset)
 
     def _format_question(self, example: Dataset) -> Dataset:
-        if self.dataset_name_or_path == "dataset/dataset.json":
-            options = "\n".join(
-                f"{example[f'option{i + 1}']}"
-                for i in range(4)
-            )
-            example["question"] = f"{example['question']}\n{options}\n答案：\n"
-
-        elif self.dataset_name_or_path == "m-a-p/CII-Bench":
+        if self.dataset_name_or_path == "m-a-p/CII-Bench":
             option_labels = ["A", "B", "C", "D", "E", "F"]
             options = "\n".join(
                 f"({option_labels[i]}) {example[f'option{i + 1}']}"
@@ -183,6 +177,10 @@ class MultimodalSystem:
 
         elif self.dataset_name_or_path == "Lin-Chen/MMStar":
             example["audio"] = None
+
+        else:
+            options = "\n".join(f"{example[f'option{i + 1}']}" for i in range(4))
+            example["question"] = f"{example['instruction']}\n{example['question']}\n{options}\n"
 
         return example
 

@@ -8,12 +8,13 @@ from src import MultimodalSystem
 def main() -> None:
     """main"""
     model_options = [
-        "llava-hf/llava-1.5-7b-hf",
         "llava-hf/llava-v1.6-mistral-7b-hf",
+        "llava-hf/llava-1.5-7b-hf",
         "Qwen/Qwen2-VL-7B-Instruct",
         "meta-llama/Llama-3.2-11B-Vision-Instruct",
     ]
     dataset_options = [
+        "dataset_v1",
         "m-a-p/CII-Bench",
         "Lin-Chen/MMStar",
     ]
