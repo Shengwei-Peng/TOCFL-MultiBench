@@ -3,50 +3,65 @@ import os
 import re
 import gc
 import json
+import warnings
 
 import torch
 import pandas as pd
-from PIL.Image import Image
+from PIL import Image
 from tqdm.auto import tqdm
 from huggingface_hub import login
 from datasets import load_dataset, Dataset
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig, pipeline
+from transformers import (
+    AutoProcessor,
+    AutoModelForImageTextToText,
+    AutoModelForSpeechSeq2Seq,
+    BitsAndBytesConfig,
+    pipeline,
+    logging
+)
 
+
+logging.set_verbosity_error()
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 class MultimodalSystem:
     """MultimodalSystem"""
     def __init__(
-        self, model_name_or_path: str,
+        self,
+        model_name_or_path: str,
         dataset_name_or_path: str,
         tensor_type: str,
+        asr_model_name_or_path: str | None = None,
     ) -> None:
         """__init__"""
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
         self.tensor_type = ""
         self.model_name_or_path = ""
+        self.asr_model_name_or_path = ""
         self.dataset_name_or_path = ""
         self.processor_config = {
             "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
         }
         self.dataset_config = {
-            "dataset_v1": "train",
             "m-a-p/CII-Bench": "test",
             "Lin-Chen/MMStar": "val"
         }
         print(
-            self.load(tensor_type, model_name_or_path, dataset_name_or_path).to_string(index=False)
-        )
-        self.asr_model = pipeline(
-            task="automatic-speech-recognition",
-            model="openai/whisper-large-v3-turbo",
-            device_map="auto",
-            torch_dtype="auto",
+            self.load(
+                tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path
+            ).to_string(index=False)
         )
 
-    def load(self, tensor_type: str, model_name_or_path: str, dataset_name_or_path: str) -> dict:
+    def load(
+        self,
+        tensor_type: str,
+        model_name_or_path: str,
+        asr_model_name_or_path: str,
+        dataset_name_or_path: str
+    ) -> dict:
         """load"""
         if model_name_or_path != self.model_name_or_path or tensor_type != self.tensor_type:
-            self._clear_resources()
+            self._clear_resources(model_name_or_path)
             self.tensor_type = tensor_type
             self.model_name_or_path = model_name_or_path
             self.processor = AutoProcessor.from_pretrained(
@@ -61,33 +76,63 @@ class MultimodalSystem:
             )
             self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
+        if (
+            asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type
+            and asr_model_name_or_path is not None
+            ):
+            self._clear_resources(asr_model_name_or_path)
+            self.tensor_type = tensor_type
+            self.asr_model_name_or_path = asr_model_name_or_path
+            asr_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                self.asr_model_name_or_path,
+                device_map="auto",
+                **self._get_model_config(self.asr_model_name_or_path, tensor_type)
+            )
+            asr_processor = AutoProcessor.from_pretrained(self.asr_model_name_or_path)
+            self.asr_model = pipeline(
+                task="automatic-speech-recognition",
+                model=asr_model,
+                tokenizer=asr_processor.tokenizer,
+                feature_extractor=asr_processor.feature_extractor
+            )
+
         if dataset_name_or_path != self.dataset_name_or_path:
             self.dataset_name_or_path = dataset_name_or_path
-            if self.dataset_name_or_path == "dataset/dataset.json":
-                self.dataset = load_dataset(
-                    "json", data_files=self.dataset_name_or_path, split="train"
+            if self.dataset_name_or_path not in self.dataset_config:
+                dataset = load_dataset(
+                    "json",
+                    data_files=self.dataset_name_or_path,
+                    split="train",
                 )
             else:
-                self.dataset = load_dataset(
+                dataset = load_dataset(
                     self.dataset_name_or_path,
-                    split=self.dataset_config[self.dataset_name_or_path]
+                    split=self.dataset_config[self.dataset_name_or_path],
                 )
+            self.dataset = Dataset.from_list([
+                self._preprocess(example)
+                for example in tqdm(dataset, desc="Processing dataset", unit="example")
+            ])
 
-        tensor_type = next(self.model.parameters()).dtype
-        total_params = sum(p.numel() for p in self.model.parameters())
         return pd.DataFrame(
             {
                 "Model name": [self.model_name_or_path],
+                "ASR Model name": [self.asr_model_name_or_path],
                 "Dataset name": [self.dataset_name_or_path],
-                "Tensor type": [str(tensor_type)],
-                "Model size": [f"{total_params / 1e9:.2f}B"]
+                "Tensor type": [self.tensor_type],
+                "Model size": [
+                    f"{sum(p.numel() for p in self.model.parameters()) / 1e9:.2f}B"
+                ],
+                "ASR Model size": [
+                    f"{sum(p.numel() for p in self.asr_model.model.parameters()) / 1e9:.2f}B"
+                ]
             }
         )
 
     def generate(
         self,
         texts: list | str,
-        images: list | Image = None,
+        images: list | Image.Image = None,
         audios: list | str = None
     ) -> list | str:
         """generate"""
@@ -106,9 +151,6 @@ class MultimodalSystem:
                 )
             texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
 
-        dummy_image = torch.zeros((3, 224, 224))
-        processed_images = [img if img is not None else dummy_image for img in images]
-
         conversations = [
             [
                 {"role": "user", "content": [{"type": "text", "text": text}, {"type": "image"}]}
@@ -121,7 +163,7 @@ class MultimodalSystem:
         ]
         inputs = self.processor(
             text=prompts,
-            images=processed_images,
+            images=images,
             return_tensors="pt",
             padding=True
         ).to(self.model.device)
@@ -140,18 +182,17 @@ class MultimodalSystem:
         correct = 0
         results = []
         total_examples = len(self.dataset)
-        dataset = self.dataset.map(self._format_question)
 
         for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
             end_idx = min(start_idx + batch_size, total_examples)
-            batch = dataset.select(range(start_idx, end_idx))
+            batch = self.dataset.select(range(start_idx, end_idx))
 
             generations = self.generate(batch["question"], batch["image"], batch["audio"])
 
             correct += self._count_correct(generations, batch["answer"])
             results.extend([
-                {"question": q, "generation": g, "answer": a}
-                for q, g, a in zip(batch["question"], generations, batch["answer"])
+                {"id": i, "question": q, "generation": g, "answer": a}
+                for i, q, g, a in zip(batch["id"], batch["question"], generations, batch["answer"])
             ])
 
         model_name = self.model_name_or_path.split("/")[-1]
@@ -161,7 +202,7 @@ class MultimodalSystem:
 
         return correct / len(self.dataset)
 
-    def _format_question(self, example: Dataset) -> Dataset:
+    def _preprocess(self, example: dict) -> dict:
         if self.dataset_name_or_path == "m-a-p/CII-Bench":
             option_labels = ["A", "B", "C", "D", "E", "F"]
             options = "\n".join(
@@ -179,16 +220,18 @@ class MultimodalSystem:
             example["audio"] = None
 
         else:
+            if example["image"] is None:
+                example["image"] = Image.new("RGB", (224, 224), color=(0, 0, 0))
+            else:
+                example["image"] = Image.open(example["image"]).convert("RGB")
             options = "\n".join(f"{example[f'option{i + 1}']}" for i in range(4))
             example["question"] = f"{example['instruction']}\n{example['question']}\n{options}\n"
 
         return example
 
-    def _clear_resources(self) -> None:
-        if hasattr(self, "model"):
-            delattr(self, "model")
-        if hasattr(self, "processor"):
-            delattr(self, "processor")
+    def _clear_resources(self, name: str) -> None:
+        if hasattr(self, name):
+            delattr(self, name)
         torch.cuda.empty_cache()
         gc.collect()
 
@@ -205,6 +248,7 @@ class MultimodalSystem:
             "llava-hf/llava-1.5-7b-hf": {"attn_implementation": "flash_attention_2"},
             "llava-hf/llava-v1.6-mistral-7b-hf": {"attn_implementation": "flash_attention_2"},
             "Qwen/Qwen2-VL-7B-Instruct": {"attn_implementation": "flash_attention_2"},
+            "openai/whisper-large-v3-turbo": {"attn_implementation": "flash_attention_2"},
         }.get(model_name_or_path, {})
 
         dtype_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16}
@@ -214,7 +258,8 @@ class MultimodalSystem:
             model_config["quantization_config"] = BitsAndBytesConfig(**{
                 "load_in_8bit": tensor_type == "int8",
                 "load_in_4bit": tensor_type in {"fp4", "nf4"},
-                "bnb_4bit_quant_type": "nf4" if tensor_type == "nf4" else "fp4"
+                "bnb_4bit_quant_type": "nf4" if tensor_type == "nf4" else "fp4",
+                "bnb_4bit_compute_dtype": torch.float16,
             })
 
         return model_config
