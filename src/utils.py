@@ -20,7 +20,6 @@ from transformers import (
     logging
 )
 
-
 logging.set_verbosity_error()
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -132,50 +131,53 @@ class MultimodalSystem:
     def generate(
         self,
         texts: list | str,
-        images: list | Image.Image = None,
+        images: list | str = None,
         audios: list | str = None
     ) -> list | str:
         """generate"""
         is_batch = isinstance(texts, list)
         if not is_batch:
             texts = [texts]
-            images = [images] if images is not None else [None]
-            audios = [audios] if audios is not None else [None]
+            images = [images] if images is not None else [None] * len(texts)
+            audios = [audios] if audios is not None else [None] * len(texts)
 
-        if audios and any(audio is not None for audio in audios):
-            audio_texts = []
-            for audio in audios:
-                transcription = self.asr_model(audio, return_timestamps=True)
-                audio_texts.append(
-                    "".join([segment['text'] for segment in transcription["chunks"]])
-                )
+        if audios:
+            audio_texts = [
+                "".join([
+                    segment['text'] for segment in self.asr_model(
+                        audio, return_timestamps=True)["chunks"]
+                ]) if audio else "" for audio in audios
+            ]
             texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
 
-        conversations = [
-            [
-                {"role": "user", "content": [{"type": "text", "text": text}, {"type": "image"}]}
-            ]
-            for text in texts
+        if images:
+            images = [Image.open(image) if isinstance(image, str) else image for image in images]
+        conversation = [
+            {"role": "user", "content": [{"type": "text", "text": text}] +
+            ([{"type": "image"}] if image else [])}
+            for text, image in zip(texts, images)
         ]
-        prompts = [
-            self.processor.apply_chat_template(conv, add_generation_prompt=True)
-            for conv in conversations
-        ]
+
+        text_prompt = self.processor.apply_chat_template(
+            conversation, add_generation_prompt=True
+        )
+
         inputs = self.processor(
-            text=prompts,
-            images=images,
+            text=text_prompt,
+            images=images if any(images) else None,
             return_tensors="pt",
             padding=True
         ).to(self.model.device)
 
         generated_ids = self.model.generate(**inputs, max_new_tokens=128)
-        decoded_outputs = [
-        self.processor.decode(
-                generated_ids[i][len(inputs.input_ids[i]):], skip_special_tokens=True)
-            for i in range(len(texts))
+        generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
+        output_text = self.processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
 
-        return decoded_outputs if is_batch else decoded_outputs[0]
+        return output_text if is_batch else output_text[0]
 
     def evaluate(self, batch_size: int = 1) -> float:
         """evaluate"""
@@ -220,10 +222,6 @@ class MultimodalSystem:
             example["audio"] = None
 
         else:
-            if example["image"] is None:
-                example["image"] = Image.new("RGB", (224, 224), color=(0, 0, 0))
-            else:
-                example["image"] = Image.open(example["image"]).convert("RGB")
             options = "\n".join(f"{example[f'option{i + 1}']}" for i in range(4))
             example["question"] = f"{example['instruction']}\n{example['question']}\n{options}\n"
 
@@ -248,6 +246,7 @@ class MultimodalSystem:
             "llava-hf/llava-1.5-7b-hf": {"attn_implementation": "flash_attention_2"},
             "llava-hf/llava-v1.6-mistral-7b-hf": {"attn_implementation": "flash_attention_2"},
             "Qwen/Qwen2-VL-7B-Instruct": {"attn_implementation": "flash_attention_2"},
+            "Qwen/Qwen2-VL-2B-Instruct": {"attn_implementation": "flash_attention_2"},
             "openai/whisper-large-v3-turbo": {"attn_implementation": "flash_attention_2"},
         }.get(model_name_or_path, {})
 
