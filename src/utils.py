@@ -39,6 +39,7 @@ class MultimodalSystem:
         self.model_name_or_path = ""
         self.asr_model_name_or_path = ""
         self.dataset_name_or_path = ""
+        self.asr_model = None
         self.processor_config = {
             "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
         }
@@ -46,6 +47,7 @@ class MultimodalSystem:
             "m-a-p/CII-Bench": "test",
             "Lin-Chen/MMStar": "val"
         }
+        
         df = self.load(tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path)
         print(tabulate(df, headers="keys", tablefmt="pretty", showindex=False))
 
@@ -74,7 +76,7 @@ class MultimodalSystem:
             self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
         if (
-            asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type
+            (asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type)
             and asr_model_name_or_path is not None
             ):
             self._clear_resources(asr_model_name_or_path)
@@ -122,6 +124,7 @@ class MultimodalSystem:
                 ],
                 "ASR Model size": [
                     f"{sum(p.numel() for p in self.asr_model.model.parameters()) / 1e9:.2f}B"
+                    if self.asr_model is not None else "0B"
                 ]
             }
         )
@@ -139,7 +142,7 @@ class MultimodalSystem:
             images = [images] if images is not None else [None] * len(texts)
             audios = [audios] if audios is not None else [None] * len(texts)
 
-        if audios:
+        if audios and self.asr_model is not None:
             audio_texts = [
                 "".join([
                     segment['text'] for segment in self.asr_model(
