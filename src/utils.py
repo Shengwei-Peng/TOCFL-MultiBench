@@ -9,6 +9,7 @@ import torch
 import pandas as pd
 from PIL import Image
 from tqdm.auto import tqdm
+from tabulate import tabulate
 from huggingface_hub import login
 from datasets import load_dataset, Dataset
 from transformers import (
@@ -45,11 +46,8 @@ class MultimodalSystem:
             "m-a-p/CII-Bench": "test",
             "Lin-Chen/MMStar": "val"
         }
-        print(
-            self.load(
-                tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path
-            ).to_string(index=False)
-        )
+        df = self.load(tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path)
+        print(tabulate(df, headers="keys", tablefmt="pretty", showindex=False))
 
     def load(
         self,
@@ -57,7 +55,7 @@ class MultimodalSystem:
         model_name_or_path: str,
         asr_model_name_or_path: str,
         dataset_name_or_path: str
-    ) -> dict:
+    ) -> pd.DataFrame:
         """load"""
         if model_name_or_path != self.model_name_or_path or tensor_type != self.tensor_type:
             self._clear_resources(model_name_or_path)
