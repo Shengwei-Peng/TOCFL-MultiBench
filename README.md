@@ -1,13 +1,5 @@
 # TOCFL-MultiBench: A Multimodal Benchmark for Evaluating Chinese Language Proficiency
 
-## 📑 Table of Contents
-- [Installation](#Installation)
-- [Usage](#Usage)
-- [Results](#Results)
-- [Acknowledgements](#acknowledgements)
-- [Contributing](#Contributing)
-- [Contact](#contact)
-
 ## 💻 Installation
 
 ### Prerequisites
@@ -65,6 +57,10 @@ We welcome contributions to the project! Please follow the guidelines below:
 2. Create a new branch (`feature/your-feature-name`).
 3. Commit your changes.
 4. Submit a pull request.
+
+## ⚖️ License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](./LICENSE) file for more details.
 
 ## 📧 Contact
 
