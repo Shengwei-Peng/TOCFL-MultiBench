@@ -1,18 +1,10 @@
 """collector"""
 import json
 from pathlib import Path
+from argparse import ArgumentParser
 
 import gradio as gr
 from pydub import AudioSegment
-
-base_dir = Path("dataset")
-json_file_path = base_dir / "dataset.json"
-images_dir = base_dir / "images"
-audio_dir = base_dir / "audio"
-images_dir.mkdir(parents=True, exist_ok=True)
-audio_dir.mkdir(parents=True, exist_ok=True)
-if not json_file_path.exists():
-    json_file_path.write_text(json.dumps([]), encoding="utf-8")
 
 def collect(
     image: str, audio_file1: str, audio_file2: str, instruction: str, question: str,
@@ -98,14 +90,6 @@ def delete_last_entry()-> None:
 
     return convert_to_list_format(records)
 
-def load_existing_data():
-    """load_existing_data"""
-    if json_file_path.exists():
-        with open(json_file_path, "r", encoding="utf-8") as file:
-            records = json.load(file)
-        return convert_to_list_format(records)
-    return []
-
 def generate_id(edition: str, test_type: str, level: str, part: str, sequence: int) -> str:
     """generate_id"""
     edition_mapping = {"第一輯": "01", "第二輯": "02", "第三輯": "03", "第四輯": "04", "第五輯": "05"}
@@ -132,9 +116,34 @@ def merge_audio_files(audio_file1: str, audio_file2: str, output_path: str) -> N
         combined_audio += AudioSegment.from_file(audio_file2)
     combined_audio.export(output_path, format="mp3")
 
+def setup_and_load_data():
+    parser = ArgumentParser()
+    parser.add_argument("--dataset_dir", type=str, default="dataset")
+    args = parser.parse_args()
+
+    global json_file_path
+
+    dataset_dir = Path(args.dataset_dir)
+    json_file_path = dataset_dir / "dataset.json"
+    images_dir = dataset_dir / "images"
+    audio_dir = dataset_dir / "audios"
+
+    images_dir.mkdir(parents=True, exist_ok=True)
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    json_file_path.write_text("[]", encoding="utf-8") if not json_file_path.exists() else None
+    print(f"Directories created at: {dataset_dir}")
+
+    if json_file_path.exists():
+        with open(json_file_path, "r", encoding="utf-8") as file:
+            records = json.load(file)
+        return convert_to_list_format(records)
+
+    return []
+
+
 def main() -> None:
     """main"""
-    existing_data = load_existing_data()
+    records = setup_and_load_data()
 
     with gr.Blocks() as interface:
         with gr.Row():
@@ -181,7 +190,7 @@ def main() -> None:
                 "ID", "Image", "Audio", "Instruction", "Question",
                 "Option 1", "Option 2", "Option 3", "Option 4", "Answer"
             ],
-            value=existing_data
+            value=records
         )
         submit_button.click(
             fn=collect,
