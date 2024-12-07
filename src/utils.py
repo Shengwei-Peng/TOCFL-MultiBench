@@ -4,6 +4,7 @@ import re
 import gc
 import json
 import warnings
+from datetime import datetime
 
 import torch
 import pandas as pd
@@ -191,18 +192,45 @@ class MultimodalSystem:
             batch = self.dataset.select(range(start_idx, end_idx))
 
             generations = self.generate(batch["question"], batch["image"], batch["audio"])
-
             correct += self._count_correct(generations, batch["answer"])
+
             results.extend([
-                {"id": i, "question": q, "generation": g, "answer": a}
-                for i, q, g, a in zip(batch["id"], batch["question"], generations, batch["answer"])
+                {
+                    "id": i,
+                    "question": question,
+                    "image": image,
+                    "audio": audio,
+                    "generation": generations,
+                    "answer": answer,
+                }
+                for i, question, image, audio, generations, answer in zip(
+                    batch["id"],
+                    batch["question"],
+                    batch["image"],
+                    batch["audio"],
+                    generations,
+                    batch["answer"],
+                )
             ])
 
-        model_name = self.model_name_or_path.split("/")[-1]
-        dataset_name = self.dataset_name_or_path.split("/")[-1]
-        with open( f"{dataset_name}_{model_name}.json", "w", encoding="utf-8") as file:
-            json.dump(results, file, ensure_ascii=False, indent=4)
+        output_dir = Path(datetime.now().strftime("%Y%m%d_%H%M%S"))
+        output_dir.mkdir(parents=True, exist_ok=True)
 
+        config = {
+            "tensor_type": self.tensor_type,
+            "model_name_or_path": self.model_name_or_path,
+            "asr_model_name_or_path": self.asr_model_name_or_path,
+            "dataset_name_or_path": self.dataset_name_or_path,
+        }
+
+        config_file = output_dir / "config.json"
+        with config_file.open("w", encoding="utf-8") as file:
+            json.dump(config, file, ensure_ascii=False, indent=4)
+    
+        result_file = output_dir / "evaluation_results.json"
+        with result_file.open("w", encoding="utf-8") as file:
+            json.dump(results, file, ensure_ascii=False, indent=4)
+        
         return correct / len(self.dataset)
 
     def _preprocess(self, example: dict) -> dict:
