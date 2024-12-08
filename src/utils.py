@@ -3,6 +3,7 @@ import os
 import re
 import gc
 import json
+import time
 import warnings
 from datetime import datetime
 
@@ -134,7 +135,8 @@ class MultimodalSystem:
         self,
         texts: list | str,
         images: list | str = None,
-        audios: list | str = None
+        audios: list | str = None,
+        max_new_tokens: int = 128,
     ) -> list | str:
         """generate"""
         is_batch = isinstance(texts, list)
@@ -154,6 +156,7 @@ class MultimodalSystem:
 
         if images:
             images = [Image.open(image) if isinstance(image, str) else image for image in images]
+
         conversation = [
             {"role": "user", "content": [{"type": "text", "text": text}] +
             ([{"type": "image"}] if image else [])}
@@ -171,7 +174,7 @@ class MultimodalSystem:
             padding=True
         ).to(self.model.device)
 
-        generated_ids = self.model.generate(**inputs, max_new_tokens=128)
+        generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
         generated_ids_trimmed = [
             out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
@@ -181,17 +184,18 @@ class MultimodalSystem:
 
         return output_text if is_batch else output_text[0]
 
-    def evaluate(self, batch_size: int = 1) -> float:
+    def evaluate(self, batch_size: int = 1, max_new_tokens: int = 128) -> float:
         """evaluate"""
         correct = 0
         results = []
         total_examples = len(self.dataset)
 
+        start_time = time.time()
         for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
             end_idx = min(start_idx + batch_size, total_examples)
             batch = self.dataset.select(range(start_idx, end_idx))
 
-            generations = self.generate(batch["question"], batch["image"], batch["audio"])
+            generations = self.generate(batch["question"], batch["image"], batch["audio"], max_new_tokens)
             correct += self._count_correct(generations, batch["answer"])
 
             results.extend([
@@ -213,6 +217,9 @@ class MultimodalSystem:
                 )
             ])
 
+        end_time = time.time()
+        accuracy = correct / total_examples
+
         output_dir = Path(datetime.now().strftime("%Y%m%d_%H%M%S"))
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -221,17 +228,19 @@ class MultimodalSystem:
             "model_name_or_path": self.model_name_or_path,
             "asr_model_name_or_path": self.asr_model_name_or_path,
             "dataset_name_or_path": self.dataset_name_or_path,
+            "accuracy": accuracy,
+            "runtime": end_time - start_time,
         }
 
         config_file = output_dir / "config.json"
         with config_file.open("w", encoding="utf-8") as file:
             json.dump(config, file, ensure_ascii=False, indent=4)
     
-        result_file = output_dir / "evaluation_results.json"
+        result_file = output_dir / "results.json"
         with result_file.open("w", encoding="utf-8") as file:
             json.dump(results, file, ensure_ascii=False, indent=4)
         
-        return correct / len(self.dataset)
+        return accuracy
 
     def _preprocess(self, example: dict) -> dict:
         if self.dataset_name_or_path == "m-a-p/CII-Bench":
