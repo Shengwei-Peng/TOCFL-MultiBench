@@ -5,19 +5,24 @@ import gc
 import json
 import time
 import warnings
+from io import BytesIO
+from pathlib import Path
 from datetime import datetime
 
 import torch
+import librosa
 import pandas as pd
 from PIL import Image
 from tqdm.auto import tqdm
 from tabulate import tabulate
 from huggingface_hub import login
+from urllib.request import urlopen
 from datasets import load_dataset, Dataset
 from transformers import (
     AutoProcessor,
     AutoModelForImageTextToText,
     AutoModelForSpeechSeq2Seq,
+    AutoModelForSeq2SeqLM,
     BitsAndBytesConfig,
     pipeline,
     logging
@@ -44,6 +49,7 @@ class MultimodalSystem:
         self.asr_model = None
         self.processor_config = {
             "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
+            "Qwen/Qwen2-VL-2B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
         }
         self.dataset_config = {
             "m-a-p/CII-Bench": "test",
@@ -69,12 +75,20 @@ class MultimodalSystem:
                 self.model_name_or_path, trust_remote_code=True,
                 **self.processor_config.get(self.model_name_or_path, {})
             )
-            self.model = AutoModelForImageTextToText.from_pretrained(
-                self.model_name_or_path,
-                trust_remote_code=True,
-                device_map="auto",
-                **self._get_model_config(self.model_name_or_path, tensor_type)
-            )
+            if "Audio" in self.model_name_or_path:
+                self.model = AutoModelForSeq2SeqLM.from_pretrained(
+                    self.model_name_or_path,
+                    trust_remote_code=True,
+                    device_map="auto",
+                    **self._get_model_config(self.model_name_or_path, tensor_type)
+                )
+            else:
+                self.model = AutoModelForImageTextToText.from_pretrained(
+                    self.model_name_or_path,
+                    trust_remote_code=True,
+                    device_map="auto",
+                    **self._get_model_config(self.model_name_or_path, tensor_type)
+                )
             self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
         if (
@@ -145,34 +159,56 @@ class MultimodalSystem:
             images = [images] if images is not None else [None] * len(texts)
             audios = [audios] if audios is not None else [None] * len(texts)
 
-        if audios and self.asr_model is not None:
-            audio_texts = [
-                "".join([
-                    segment['text'] for segment in self.asr_model(
-                        audio, return_timestamps=True)["chunks"]
-                ]) if audio else "" for audio in audios
-            ]
-            texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
+        if "Audio" not in self.model_name_or_path:
+            if audios and self.asr_model is not None:
+                audio_texts = [
+                    "".join([
+                        segment['text'] for segment in self.asr_model(
+                            audio, return_timestamps=True)["chunks"]
+                    ]) if audio else "" for audio in audios
+                ]
+                texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
 
-        if images:
-            images = [Image.open(image) if isinstance(image, str) else image for image in images]
+            if images:
+                images = [Image.open(image) if isinstance(image, str) else image for image in images]
 
-        conversation = [
-            {"role": "user", "content": [{"type": "text", "text": text}] +
-            ([{"type": "image"}] if image else [])}
-            for text, image in zip(texts, images)
-        ]
+        conversation = []
+        for text, image, audio in zip(texts, images, audios):
+            content = [{"type": "text", "text": text}]
 
-        text_prompt = self.processor.apply_chat_template(
-            conversation, add_generation_prompt=True
-        )
+            if image:
+                content.append({"type": "image", "image_data": image})
 
-        inputs = self.processor(
-            text=text_prompt,
-            images=images if any(images) else None,
-            return_tensors="pt",
-            padding=True
-        ).to(self.model.device)
+            if audio:
+                content.append({"type": "audio", "audio_url": f"file://{Path(audio).resolve()}"})
+
+            conversation.append({"role": "user", "content": content})
+        text_prompt = self.processor.apply_chat_template(conversation, add_generation_prompt=True)
+
+        if "Audio" in self.model_name_or_path:
+            audios = []
+            for message in conversation:
+                if isinstance(message["content"], list):
+                    for ele in message["content"]:
+                        if ele["type"] == "audio":
+                            audios.append(librosa.load(
+                                BytesIO(urlopen(ele['audio_url']).read()), 
+                                sr=self.processor.feature_extractor.sampling_rate)[0]
+                            )
+            inputs = self.processor(
+                text=text_prompt,
+                audios=audios,
+                return_tensors="pt",
+                padding=True
+            ).to(self.model.device)
+
+        else:
+            inputs = self.processor(
+                text=text_prompt,
+                images=images if any(images) else None,
+                return_tensors="pt",
+                padding=True
+            ).to(self.model.device)
 
         generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
         generated_ids_trimmed = [
@@ -228,6 +264,8 @@ class MultimodalSystem:
             "model_name_or_path": self.model_name_or_path,
             "asr_model_name_or_path": self.asr_model_name_or_path,
             "dataset_name_or_path": self.dataset_name_or_path,
+            "total_examples": total_examples,
+            "correct": correct,
             "accuracy": accuracy,
             "runtime": end_time - start_time,
         }
@@ -260,8 +298,12 @@ class MultimodalSystem:
             example["audio"] = None
 
         else:
-            options = "\n".join(f"{example[f'option{i + 1}']}" for i in range(4))
-            example["question"] = f"{example['instruction']}\n{example['question']}\n{options}\n"
+            example["question"] = (
+                f"{example['instruction']}\n{example['question']}"
+                + "\n".join(example[f"option{i + 1}"] for i in range(4))
+                + "\n（E）不知道，無法回答"
+                + "\n僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D', 或 'E'，輸出限制為單個字母，無需解釋。\n"
+            )
 
         return example
 
@@ -275,8 +317,8 @@ class MultimodalSystem:
         return sum(
             1
             for generation, answer in zip(generations, answers)
-            if (match := re.search(r"\(?([A-F])\)?", generation))
-            and match.group(1).upper() == answer.upper()
+            if re.fullmatch(r"[A-F]", generation)
+            and generation.upper() == answer.upper()
         )
 
     def _get_model_config(self, model_name_or_path: str, tensor_type: str) -> dict:
