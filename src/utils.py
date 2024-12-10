@@ -8,6 +8,7 @@ import warnings
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime
+from urllib.request import urlopen
 
 import torch
 import librosa
@@ -16,7 +17,6 @@ from PIL import Image
 from tqdm.auto import tqdm
 from tabulate import tabulate
 from huggingface_hub import login
-from urllib.request import urlopen
 from datasets import load_dataset, Dataset
 from transformers import (
     AutoProcessor,
@@ -24,12 +24,13 @@ from transformers import (
     AutoModelForSpeechSeq2Seq,
     AutoModelForSeq2SeqLM,
     BitsAndBytesConfig,
+    logging,
     pipeline,
-    logging
+    set_seed
 )
 
 logging.set_verbosity_error()
-warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore")
 
 class MultimodalSystem:
     """MultimodalSystem"""
@@ -41,6 +42,7 @@ class MultimodalSystem:
         asr_model_name_or_path: str | None = None,
     ) -> None:
         """__init__"""
+        set_seed(11207330)
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
         self.tensor_type = ""
         self.model_name_or_path = ""
@@ -55,8 +57,10 @@ class MultimodalSystem:
             "m-a-p/CII-Bench": "test",
             "Lin-Chen/MMStar": "val"
         }
-        
-        df = self.load(tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path)
+
+        df = self.load(
+            tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path
+        )
         print(tabulate(df, headers="keys", tablefmt="pretty", showindex=False))
 
     def load(
@@ -91,10 +95,9 @@ class MultimodalSystem:
                 )
             self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
-        if (
-            (asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type)
-            and asr_model_name_or_path is not None
-            ):
+        if asr_model_name_or_path is not None and (
+            asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type
+        ):
             self._clear_resources(asr_model_name_or_path)
             self.tensor_type = tensor_type
             self.asr_model_name_or_path = asr_model_name_or_path
@@ -145,12 +148,75 @@ class MultimodalSystem:
             }
         )
 
+    def evaluate(
+        self,
+        batch_size: int = 1,
+        max_new_tokens: int = 20,
+        decoding_strategy: str = "greedy"
+    ) -> float:
+        """evaluate"""
+        correct = 0
+        results = []
+        total_examples = len(self.dataset)
+
+        start_time = time.time()
+        for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
+            end_idx = min(start_idx + batch_size, total_examples)
+            batch = self.dataset.select(range(start_idx, end_idx))
+
+            generations = self.generate(
+                batch["question"], batch["image"], batch["audio"],
+                max_new_tokens=max_new_tokens, decoding_strategy=decoding_strategy
+            )
+            correct += self._count_correct(generations, batch["answer"])
+            results.extend([
+                {
+                    "id": batch["id"][i],
+                    "question": batch["question"][i],
+                    "image": batch["image"][i],
+                    "audio": batch["audio"][i],
+                    "generation": generations[i],
+                    "answer": batch["answer"][i],
+                }
+                for i in range(len(batch["id"]))
+            ])
+
+        end_time = time.time()
+        accuracy = correct / total_examples
+
+        output_dir = Path(datetime.now().strftime("%Y%m%d_%H%M%S"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        config = {
+            "tensor_type": self.tensor_type,
+            "model_name_or_path": self.model_name_or_path,
+            "asr_model_name_or_path": self.asr_model_name_or_path,
+            "dataset_name_or_path": self.dataset_name_or_path,
+            "max_new_tokens": max_new_tokens,
+            "decoding_strategy": decoding_strategy,
+            "total_examples": total_examples,
+            "correct": correct,
+            "accuracy": accuracy,
+            "runtime": end_time - start_time,
+        }
+
+        (output_dir / "config.json").write_text(
+            json.dumps(config, ensure_ascii=False, indent=4), encoding="utf-8"
+        )
+
+        (output_dir / "results.json").write_text(
+            json.dumps(results, ensure_ascii=False, indent=4), encoding="utf-8"
+        )
+
+        return accuracy
+
     def generate(
         self,
         texts: list | str,
         images: list | str = None,
         audios: list | str = None,
-        max_new_tokens: int = 128,
+        max_new_tokens: int = 20,
+        decoding_strategy: str = "greedy",
     ) -> list | str:
         """generate"""
         is_batch = isinstance(texts, list)
@@ -167,24 +233,30 @@ class MultimodalSystem:
                             audio, return_timestamps=True)["chunks"]
                     ]) if audio else "" for audio in audios
                 ]
-                texts = [f"{audio_text}{text}" for audio_text, text in zip(audio_texts, texts)]
+                texts = [f"{audio_text}\n{text}" for audio_text, text in zip(audio_texts, texts)]
 
             if images:
-                images = [Image.open(image) if isinstance(image, str) else image for image in images]
+                images = [
+                    Image.open(image) if isinstance(image, str) else image for image in images
+                ]
 
         conversation = []
         for text, image, audio in zip(texts, images, audios):
-            content = [{"type": "text", "text": text}]
+            content = []
+
+            if audio and "Audio" in self.model_name_or_path:
+                content.append({"type": "audio", "audio": audio})
 
             if image:
-                content.append({"type": "image", "image_data": image})
+                content.append({"type": "image"})
 
-            if audio:
-                content.append({"type": "audio", "audio_url": f"file://{Path(audio).resolve()}"})
+            if text:
+                content.append({"type": "text", "text": text})
 
             conversation.append({"role": "user", "content": content})
-        text_prompt = self.processor.apply_chat_template(conversation, add_generation_prompt=True)
 
+        text_prompt = self.processor.apply_chat_template(conversation, add_generation_prompt=True)
+        print(text_prompt)
         if "Audio" in self.model_name_or_path:
             audios = []
             for message in conversation:
@@ -192,7 +264,7 @@ class MultimodalSystem:
                     for ele in message["content"]:
                         if ele["type"] == "audio":
                             audios.append(librosa.load(
-                                BytesIO(urlopen(ele['audio_url']).read()), 
+                                BytesIO(urlopen(ele["audio"]).read()),
                                 sr=self.processor.feature_extractor.sampling_rate)[0]
                             )
             inputs = self.processor(
@@ -210,75 +282,40 @@ class MultimodalSystem:
                 padding=True
             ).to(self.model.device)
 
-        generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
-        generated_ids_trimmed = [
-            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-        ]
-        output_text = self.processor.batch_decode(
-            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        output_text = self._generate_text(
+            inputs,
+            max_new_tokens=max_new_tokens,
+            decoding_strategy=decoding_strategy
         )
-
         return output_text if is_batch else output_text[0]
 
-    def evaluate(self, batch_size: int = 1, max_new_tokens: int = 128) -> float:
-        """evaluate"""
-        correct = 0
-        results = []
-        total_examples = len(self.dataset)
-
-        start_time = time.time()
-        for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
-            end_idx = min(start_idx + batch_size, total_examples)
-            batch = self.dataset.select(range(start_idx, end_idx))
-
-            generations = self.generate(batch["question"], batch["image"], batch["audio"], max_new_tokens)
-            correct += self._count_correct(generations, batch["answer"])
-
-            results.extend([
-                {
-                    "id": i,
-                    "question": question,
-                    "image": image,
-                    "audio": audio,
-                    "generation": generations,
-                    "answer": answer,
-                }
-                for i, question, image, audio, generations, answer in zip(
-                    batch["id"],
-                    batch["question"],
-                    batch["image"],
-                    batch["audio"],
-                    generations,
-                    batch["answer"],
-                )
-            ])
-
-        end_time = time.time()
-        accuracy = correct / total_examples
-
-        output_dir = Path(datetime.now().strftime("%Y%m%d_%H%M%S"))
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        config = {
-            "tensor_type": self.tensor_type,
-            "model_name_or_path": self.model_name_or_path,
-            "asr_model_name_or_path": self.asr_model_name_or_path,
-            "dataset_name_or_path": self.dataset_name_or_path,
-            "total_examples": total_examples,
-            "correct": correct,
-            "accuracy": accuracy,
-            "runtime": end_time - start_time,
+    def _generate_text(
+        self,
+        inputs: dict,
+        max_new_tokens: int = 20,
+        decoding_strategy: str = "greedy"
+    ) -> str | list:
+        strategy_params = {
+            "greedy": {},
+            "contrastive": {"penalty_alpha": 0.6, "top_k": 4},
+            "sampling": {"do_sample": True, "num_beams": 1},
+            "beam_search": {"num_beams": 5},
+            "beam_search_sampling": {"num_beams": 5, "do_sample": True},
+            "diverse_beam_search": {"num_beams": 5, "num_beam_groups": 5, "diversity_penalty": 1.0},
+            "self_speculative": {"do_sample": False, "assistant_early_exit": 4},
+            "dola_high": {"do_sample": False, "dola_layers": "high"},
+            "dola_low": {"do_sample": False, "dola_layers": "low"}
         }
 
-        config_file = output_dir / "config.json"
-        with config_file.open("w", encoding="utf-8") as file:
-            json.dump(config, file, ensure_ascii=False, indent=4)
-    
-        result_file = output_dir / "results.json"
-        with result_file.open("w", encoding="utf-8") as file:
-            json.dump(results, file, ensure_ascii=False, indent=4)
-        
-        return accuracy
+        params = strategy_params.get(decoding_strategy, {})
+        generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens, **params)
+
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        return self.processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
 
     def _preprocess(self, example: dict) -> dict:
         if self.dataset_name_or_path == "m-a-p/CII-Bench":
@@ -299,10 +336,9 @@ class MultimodalSystem:
 
         else:
             example["question"] = (
-                f"{example['instruction']}\n{example['question']}"
+                f"{example['instruction']}\n{example['question']}\n"
                 + "\n".join(example[f"option{i + 1}"] for i in range(4))
-                + "\n（E）不知道，無法回答"
-                + "\n僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D', 或 'E'，輸出限制為單個字母，無需解釋。\n"
+                + "僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n"
             )
 
         return example
