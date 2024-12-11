@@ -6,13 +6,49 @@ from argparse import ArgumentParser
 import gradio as gr
 from pydub import AudioSegment
 
+
+class DatasetManager:
+    """DatasetManager"""
+    def __init__(self, dataset_dir: str) -> None:
+        self.dataset_dir = Path(dataset_dir)
+        self.json_file_path = self.dataset_dir / "dataset.json"
+        self.images_dir = self.dataset_dir / "images"
+        self.audios_dir = self.dataset_dir / "audios"
+
+        self.images_dir.mkdir(parents=True, exist_ok=True)
+        self.audios_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.json_file_path.exists():
+            self.json_file_path.write_text("[]", encoding="utf-8")
+
+    def load_records(self) -> list:
+        """load_records"""
+        with self.json_file_path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
+    def save_records(self, records: list) -> None:
+        """save_records"""
+        self.json_file_path.write_text(
+            json.dumps(records, indent=4, ensure_ascii=False),
+            encoding="utf-8"
+        )
+
+    def get_image_path(self, record_id: str) -> Path:
+        """get_image_path"""
+        return self.images_dir / f"{record_id}.png"
+
+    def get_audio_path(self, record_id: str) -> Path:
+        """get_audio_path"""
+        return self.audios_dir / f"{record_id}.mp3"
+
 def collect(
     image: str, audio_file1: str, audio_file2: str, instruction: str, question: str,
     option1: str, option2: str, option3: str, option4: str, answer: str,
-    edition: str, test_type: str, level: str, part: str, sequence: int
+    edition: str, test_type: str, level: str, part: str, sequence: int,
+    dataset_manager: DatasetManager
 ) -> list:
     """collect"""
-    records = json.loads(json_file_path.read_text(encoding="utf-8"))
+    records = dataset_manager.load_records()
 
     if sequence is None or sequence <= 0:
         sequence = len(records) + 1
@@ -21,12 +57,12 @@ def collect(
 
     image_path = None
     if image:
-        image_path = images_dir / f"{record_id}.png"
+        image_path = dataset_manager.get_image_path(record_id)
         image_path.write_bytes(Path(image).read_bytes())
 
     audio_path = None
     if audio_file1 or audio_file2:
-        audio_path = audio_dir / f"{record_id}.mp3"
+        audio_path = dataset_manager.get_audio_path(record_id)
         merge_audio_files(audio_file1, audio_file2, audio_path)
 
     data = {
@@ -43,11 +79,7 @@ def collect(
     }
 
     records.append(data)
-
-    json_file_path.write_text(
-        json.dumps(records, indent=4, ensure_ascii=False),
-        encoding="utf-8"
-    )
+    dataset_manager.save_records(records)
 
     return convert_to_list_format(records)
 
@@ -55,19 +87,19 @@ def convert_to_list_format(records: list) -> list:
     """convert_to_list_format"""
     return [
         [
-            rec["id"], rec["image"], rec["audio"], rec["instruction"], rec["question"], 
+            rec["id"], rec["image"], rec["audio"], rec["instruction"], rec["question"],
             rec["option1"], rec["option2"], rec["option3"], rec["option4"], rec["answer"]
         ]
         for rec in records
     ]
 
-def clear_inputs()-> None:
+def clear_inputs() -> tuple:
     """clear_inputs"""
     return None, None, None, "", "", "", "", "", "", None, None, None, None, None
 
-def delete_last_entry()-> None:
+def delete_last_entry(dataset_manager: DatasetManager) -> list:
     """delete_last_entry"""
-    records = json.loads(json_file_path.read_text(encoding="utf-8"))
+    records = dataset_manager.load_records()
     if records:
         last_record = records.pop()
 
@@ -83,10 +115,7 @@ def delete_last_entry()-> None:
             if audio_path_obj.exists():
                 audio_path_obj.unlink()
 
-        json_file_path.write_text(
-            json.dumps(records, indent=4, ensure_ascii=False),
-            encoding="utf-8"
-        )
+        dataset_manager.save_records(records)
 
     return convert_to_list_format(records)
 
@@ -107,7 +136,7 @@ def generate_id(edition: str, test_type: str, level: str, part: str, sequence: i
 
     return f"{edition_code}-{test_type_code}-{level_code}-{part_code}-{sequence_code}"
 
-def merge_audio_files(audio_file1: str, audio_file2: str, output_path: str) -> None:
+def merge_audio_files(audio_file1: str, audio_file2: str, output_path: Path) -> None:
     """merge_audio_files"""
     combined_audio = AudioSegment.empty()
     if audio_file1:
@@ -116,34 +145,14 @@ def merge_audio_files(audio_file1: str, audio_file2: str, output_path: str) -> N
         combined_audio += AudioSegment.from_file(audio_file2)
     combined_audio.export(output_path, format="mp3")
 
-def setup_and_load_data():
+def main() -> None:
+    """main"""
     parser = ArgumentParser()
     parser.add_argument("--dataset_dir", type=str, default="dataset")
     args = parser.parse_args()
 
-    global json_file_path
-
-    dataset_dir = Path(args.dataset_dir)
-    json_file_path = dataset_dir / "dataset.json"
-    images_dir = dataset_dir / "images"
-    audio_dir = dataset_dir / "audios"
-
-    images_dir.mkdir(parents=True, exist_ok=True)
-    audio_dir.mkdir(parents=True, exist_ok=True)
-    json_file_path.write_text("[]", encoding="utf-8") if not json_file_path.exists() else None
-    print(f"Directories created at: {dataset_dir}")
-
-    if json_file_path.exists():
-        with open(json_file_path, "r", encoding="utf-8") as file:
-            records = json.load(file)
-        return convert_to_list_format(records)
-
-    return []
-
-
-def main() -> None:
-    """main"""
-    records = setup_and_load_data()
+    dataset_manager = DatasetManager(args.dataset_dir)
+    records = convert_to_list_format(dataset_manager.load_records())
 
     with gr.Blocks() as interface:
         with gr.Row():
@@ -192,8 +201,9 @@ def main() -> None:
             ],
             value=records
         )
+
         submit_button.click(
-            fn=collect,
+            fn=lambda *args: collect(*args, dataset_manager=dataset_manager),
             inputs=[
                 image_input, audio_input1, audio_input2, instruction_input, question_input,
                 option1_input, option2_input, option3_input, option4_input, answer_input,
@@ -213,7 +223,7 @@ def main() -> None:
             ]
         )
         delete_last_button.click(
-            fn=delete_last_entry,
+            fn=lambda: delete_last_entry(dataset_manager),
             inputs=[],
             outputs=outputs
         )
