@@ -5,14 +5,14 @@ import gc
 import json
 import time
 import warnings
-from io import BytesIO
 from pathlib import Path
 from datetime import datetime
-from urllib.request import urlopen
 
 import torch
 import librosa
 import pandas as pd
+import lmdeploy
+from lmdeploy.vl import load_image
 from PIL import Image
 from tqdm.auto import tqdm
 from tabulate import tabulate
@@ -44,19 +44,12 @@ class MultimodalSystem:
         """__init__"""
         set_seed(11207330)
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
+        self.prompt = "僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n"
         self.tensor_type = ""
         self.model_name_or_path = ""
         self.asr_model_name_or_path = ""
         self.dataset_name_or_path = ""
         self.asr_model = None
-        self.processor_config = {
-            "Qwen/Qwen2-VL-7B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
-            "Qwen/Qwen2-VL-2B-Instruct": {"min_pixels": 256*28*28, "max_pixels": 1280*28*28},
-        }
-        self.dataset_config = {
-            "m-a-p/CII-Bench": "test",
-            "Lin-Chen/MMStar": "val"
-        }
 
         df = self.load(
             tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path
@@ -75,25 +68,44 @@ class MultimodalSystem:
             self._clear_resources(model_name_or_path)
             self.tensor_type = tensor_type
             self.model_name_or_path = model_name_or_path
-            self.processor = AutoProcessor.from_pretrained(
-                self.model_name_or_path, trust_remote_code=True,
-                **self.processor_config.get(self.model_name_or_path, {})
-            )
-            if "Audio" in self.model_name_or_path:
-                self.model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.is_audio_language_model = "Audio" in self.model_name_or_path
+            self.is_lmdeploy_model = "lmdeploy:" in self.model_name_or_path
+            self.is_seq2seq =  "lmdeploy:" not in self.model_name_or_path
+
+            if self.is_lmdeploy_model:
+                self.model_name_or_path = self.model_name_or_path.replace("lmdeploy:", "")
+                self.model = lmdeploy.pipeline(
                     self.model_name_or_path,
-                    trust_remote_code=True,
-                    device_map="auto",
-                    **self._get_model_config(self.model_name_or_path, tensor_type)
+                    backend_config=lmdeploy.TurbomindEngineConfig(
+                        session_len=8192, cache_max_entry_count=0.2
+                    ),
                 )
+
             else:
-                self.model = AutoModelForImageTextToText.from_pretrained(
-                    self.model_name_or_path,
-                    trust_remote_code=True,
-                    device_map="auto",
-                    **self._get_model_config(self.model_name_or_path, tensor_type)
+                self.processor = AutoProcessor.from_pretrained(
+                    self.model_name_or_path, trust_remote_code=True,
+                    **(
+                        {"min_pixels": 256 * 28 * 28, "max_pixels": 1280 * 28 * 28}
+                        if "Qwen" in self.model_name_or_path else {}
+                    )
                 )
-            self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
+
+                if self.is_audio_language_model:
+                    self.model = AutoModelForSeq2SeqLM.from_pretrained(
+                        self.model_name_or_path,
+                        trust_remote_code=True,
+                        device_map="cuda",
+                        **self._get_model_config(tensor_type)
+                    ).eval()
+                else:
+                    self.model = AutoModelForImageTextToText.from_pretrained(
+                        self.model_name_or_path,
+                        trust_remote_code=True,
+                        device_map="cuda",
+                        **self._get_model_config(tensor_type)
+                    ).eval()
+
+                self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
         if asr_model_name_or_path is not None and (
             asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type
@@ -104,7 +116,7 @@ class MultimodalSystem:
             asr_model = AutoModelForSpeechSeq2Seq.from_pretrained(
                 self.asr_model_name_or_path,
                 device_map="auto",
-                **self._get_model_config(self.asr_model_name_or_path, tensor_type)
+                **self._get_model_config(tensor_type)
             )
             asr_processor = AutoProcessor.from_pretrained(self.asr_model_name_or_path)
             self.asr_model = pipeline(
@@ -116,17 +128,11 @@ class MultimodalSystem:
 
         if dataset_name_or_path != self.dataset_name_or_path:
             self.dataset_name_or_path = dataset_name_or_path
-            if self.dataset_name_or_path not in self.dataset_config:
-                dataset = load_dataset(
-                    "json",
-                    data_files=self.dataset_name_or_path,
-                    split="train",
-                )
-            else:
-                dataset = load_dataset(
-                    self.dataset_name_or_path,
-                    split=self.dataset_config[self.dataset_name_or_path],
-                )
+            dataset = load_dataset(
+                "json",
+                data_files=self.dataset_name_or_path,
+                split="train",
+            )
             self.dataset = Dataset.from_list([
                 self._preprocess(example)
                 for example in tqdm(dataset, desc="Processing dataset", unit="example")
@@ -140,18 +146,18 @@ class MultimodalSystem:
                 "Tensor type": [self.tensor_type],
                 "Model size": [
                     f"{sum(p.numel() for p in self.model.parameters()) / 1e9:.2f}B"
-                ],
+                ] if not self.is_lmdeploy_model else [None],
                 "ASR Model size": [
                     f"{sum(p.numel() for p in self.asr_model.model.parameters()) / 1e9:.2f}B"
                     if self.asr_model is not None else "0B"
-                ]
+                ],
             }
         )
 
     def evaluate(
         self,
         batch_size: int = 1,
-        max_new_tokens: int = 20,
+        max_new_tokens: int = 1,
         decoding_strategy: str = "greedy"
     ) -> float:
         """evaluate"""
@@ -215,39 +221,53 @@ class MultimodalSystem:
         texts: list | str,
         images: list | str = None,
         audios: list | str = None,
-        max_new_tokens: int = 20,
+        max_new_tokens: int = 1,
         decoding_strategy: str = "greedy",
     ) -> list | str:
         """generate"""
         is_batch = isinstance(texts, list)
+
         if not is_batch:
             texts = [texts]
             images = [images] if images is not None else [None] * len(texts)
             audios = [audios] if audios is not None else [None] * len(texts)
 
-        if "Audio" not in self.model_name_or_path:
-            if audios and self.asr_model is not None:
-                audio_texts = [
-                    "".join([
-                        segment['text'] for segment in self.asr_model(
-                            audio, return_timestamps=True)["chunks"]
-                    ]) if audio else "" for audio in audios
-                ]
-                texts = [f"{audio_text}\n{text}" for audio_text, text in zip(audio_texts, texts)]
+        if audios and self.asr_model is not None and not self.is_audio_language_model:
+            audio_texts = [
+                "".join([
+                    segment['text'] for segment in self.asr_model(
+                        audio, return_timestamps=True)["chunks"]
+                ]) if audio else "" for audio in audios
+            ]
+            texts = [f"{audio_text}\n{text}" for audio_text, text in zip(audio_texts, texts)]
 
+        if self.is_lmdeploy_model:
             if images:
-                images = [
-                    Image.open(image) if isinstance(image, str) else image for image in images
-                ]
+                image = load_image(images[0])
+                response = self.model((texts[0], image))
+            else:
+                response = self.model((texts[0]))
+            return [response.text.strip()]
+
+        if images:
+            requires_image = any(
+                keyword in self.model_name_or_path
+                for keyword in ["llava", "paligemma"]
+            )
+            for i, image in enumerate(images):
+                if isinstance(image, str):
+                    images[i] = Image.open(image).convert("RGB")
+                elif image is None and requires_image:
+                    images[i] = Image.new("RGB", (224, 224), (255, 255, 255))
 
         conversation = []
         for text, image, audio in zip(texts, images, audios):
             content = []
 
-            if audio and "Audio" in self.model_name_or_path:
+            if audio and self.is_audio_language_model:
                 content.append({"type": "audio", "audio": audio})
 
-            if image:
+            if image and not self.is_audio_language_model:
                 content.append({"type": "image"})
 
             if text:
@@ -255,21 +275,38 @@ class MultimodalSystem:
 
             conversation.append({"role": "user", "content": content})
 
-        text_prompt = self.processor.apply_chat_template(conversation, add_generation_prompt=True)
-        print(text_prompt)
-        if "Audio" in self.model_name_or_path:
+        if (
+            getattr(self.processor, "apply_chat_template", None)
+            and getattr(self.processor, "chat_template", None)
+        ):
+            text_prompt = self.processor.apply_chat_template(
+                conversation, add_generation_prompt=True
+            ) if self.processor.chat_template else conversation
+        else:
+            text_prompt = conversation
+
+        if self.is_audio_language_model:
             audios = []
             for message in conversation:
                 if isinstance(message["content"], list):
                     for ele in message["content"]:
                         if ele["type"] == "audio":
                             audios.append(librosa.load(
-                                BytesIO(urlopen(ele["audio"]).read()),
-                                sr=self.processor.feature_extractor.sampling_rate)[0]
+                                ele["audio"], sr=self.processor.feature_extractor.sampling_rate
+                                )[0]
                             )
+
             inputs = self.processor(
                 text=text_prompt,
                 audios=audios,
+                return_tensors="pt",
+                padding=True
+            ).to(self.model.device)
+
+        elif "paligemma" in self.model_name_or_path:
+            inputs = self.processor(
+                text=texts,
+                images=images if any(images) else None,
                 return_tensors="pt",
                 padding=True
             ).to(self.model.device)
@@ -292,7 +329,7 @@ class MultimodalSystem:
     def _generate_text(
         self,
         inputs: dict,
-        max_new_tokens: int = 20,
+        max_new_tokens: int = 1,
         decoding_strategy: str = "greedy"
     ) -> str | list:
         strategy_params = {
@@ -300,8 +337,10 @@ class MultimodalSystem:
             "contrastive": {"penalty_alpha": 0.6, "top_k": 4},
             "sampling": {"do_sample": True, "num_beams": 1},
             "beam_search": {"num_beams": 5},
-            "beam_search_sampling": {"num_beams": 5, "do_sample": True},
-            "diverse_beam_search": {"num_beams": 5, "num_beam_groups": 5, "diversity_penalty": 1.0},
+            "beam_search_sampling": {"do_sample": True, "num_beams": 5},
+            "diverse_beam_search": {
+                "do_sample": False, "num_beams": 5, "num_beam_groups": 5, "diversity_penalty": 1.0
+            },
             "self_speculative": {"do_sample": False, "assistant_early_exit": 4},
             "dola_high": {"do_sample": False, "dola_layers": "high"},
             "dola_low": {"do_sample": False, "dola_layers": "low"}
@@ -318,29 +357,12 @@ class MultimodalSystem:
         )
 
     def _preprocess(self, example: dict) -> dict:
-        if self.dataset_name_or_path == "m-a-p/CII-Bench":
-            option_labels = ["A", "B", "C", "D", "E", "F"]
-            options = "\n".join(
-                f"({option_labels[i]}) {example[f'option{i + 1}']}"
-                for i in range(6)
-            )
-            example["question"] = (
-                "请根据提供的图片尝试回答下面的单选题。直接回答正确选项，不要包含额外的解释。\n"
-                "请使用以下格式：“答案：$LETTER”，其中$LETTER是你认为正确答案的字母。\n"
-                f"{example['question']}\n{options}\n答案：\n"
-            )
-            example["audio"] = None
-
-        elif self.dataset_name_or_path == "Lin-Chen/MMStar":
-            example["audio"] = None
-
-        else:
-            example["question"] = (
-                f"{example['instruction']}\n{example['question']}\n"
-                + "\n".join(example[f"option{i + 1}"] for i in range(4))
-                + "僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n"
-            )
-
+        example["question"] = (
+            f"{example['instruction']}\n"
+            + f"{example['question']}\n"
+            + "".join(example[f"option{i + 1}"] for i in range(4)) + "\n"
+            + self.prompt
+        )
         return example
 
     def _clear_resources(self, name: str) -> None:
@@ -357,14 +379,10 @@ class MultimodalSystem:
             and generation.upper() == answer.upper()
         )
 
-    def _get_model_config(self, model_name_or_path: str, tensor_type: str) -> dict:
-        model_config = {
-            "llava-hf/llava-1.5-7b-hf": {"attn_implementation": "flash_attention_2"},
-            "llava-hf/llava-v1.6-mistral-7b-hf": {"attn_implementation": "flash_attention_2"},
-            "Qwen/Qwen2-VL-7B-Instruct": {"attn_implementation": "flash_attention_2"},
-            "Qwen/Qwen2-VL-2B-Instruct": {"attn_implementation": "flash_attention_2"},
-            "openai/whisper-large-v3-turbo": {"attn_implementation": "flash_attention_2"},
-        }.get(model_name_or_path, {})
+    def _get_model_config(self, tensor_type: str) -> dict:
+        model_config = {}
+        if tensor_type != "fp16" and not self.is_audio_language_model:
+            model_config["attn_implementation"] = "flash_attention_2"
 
         dtype_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16}
         model_config["torch_dtype"] = dtype_mapping.get(tensor_type, "auto")
