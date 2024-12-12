@@ -11,7 +11,7 @@ class DatasetManager:
     """DatasetManager"""
     def __init__(self, dataset_dir: str) -> None:
         self.dataset_dir = Path(dataset_dir)
-        self.json_file_path = self.dataset_dir / "dataset.json"
+        self.json_file_path = self.dataset_dir / "TOCFL-MultiBench.json"
         self.images_dir = self.dataset_dir / "images"
         self.audios_dir = self.dataset_dir / "audios"
 
@@ -148,7 +148,7 @@ def merge_audio_files(audio_file1: str, audio_file2: str, output_path: Path) -> 
 def main() -> None:
     """main"""
     parser = ArgumentParser()
-    parser.add_argument("--dataset_dir", type=str, default="dataset")
+    parser.add_argument("--dataset_dir", type=str, default="TOCFL-MultiBench")
     args = parser.parse_args()
 
     dataset_manager = DatasetManager(args.dataset_dir)
