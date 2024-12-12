@@ -3,7 +3,7 @@ import argparse
 
 from dotenv import load_dotenv
 
-from src.utils import MultimodalSystem
+from src.system import MultimodalSystem
 
 def main():
     """main"""

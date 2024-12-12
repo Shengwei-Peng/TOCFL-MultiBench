@@ -1,36 +1,39 @@
 """utils"""
-import os
-import re
 import gc
 import json
+import os
 import time
 import warnings
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-import torch
 import librosa
-import pandas as pd
 import lmdeploy
-from lmdeploy.vl import load_image
+import pandas as pd
+import torch
 from PIL import Image
-from tqdm.auto import tqdm
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from tabulate import tabulate
+from tqdm.auto import tqdm
+from datasets import Dataset, load_dataset
 from huggingface_hub import login
-from datasets import load_dataset, Dataset
+from lmdeploy.vl import load_image
 from transformers import (
-    AutoProcessor,
     AutoModelForImageTextToText,
-    AutoModelForSpeechSeq2Seq,
     AutoModelForSeq2SeqLM,
+    AutoModelForSpeechSeq2Seq,
+    AutoProcessor,
     BitsAndBytesConfig,
     logging,
     pipeline,
-    set_seed
+    set_seed,
 )
+
+from .stcm import STCM
 
 logging.set_verbosity_error()
 warnings.filterwarnings("ignore")
+
 
 class MultimodalSystem:
     """MultimodalSystem"""
@@ -105,6 +108,10 @@ class MultimodalSystem:
                         **self._get_model_config(tensor_type)
                     ).eval()
 
+                self.stcm = STCM(
+                    allowed_tokens=["A", "B", "C", "D"], tokenizer=self.processor.tokenizer
+                )
+
                 self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
         if asr_model_name_or_path is not None and (
@@ -158,12 +165,15 @@ class MultimodalSystem:
         self,
         batch_size: int = 1,
         max_new_tokens: int = 1,
-        decoding_strategy: str = "greedy"
+        decoding_strategy: str = "greedy",
+        use_stcm: bool = False,
     ) -> float:
         """evaluate"""
-        correct = 0
-        results = []
         total_examples = len(self.dataset)
+
+        results = []
+        all_generations = []
+        all_answers = []
 
         start_time = time.time()
         for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
@@ -172,9 +182,14 @@ class MultimodalSystem:
 
             generations = self.generate(
                 batch["question"], batch["image"], batch["audio"],
-                max_new_tokens=max_new_tokens, decoding_strategy=decoding_strategy
+                max_new_tokens=max_new_tokens,
+                decoding_strategy=decoding_strategy,
+                use_stcm = use_stcm,
             )
-            correct += self._count_correct(generations, batch["answer"])
+
+            all_generations.extend([generation.strip().upper() for generation in generations])
+            all_answers.extend(batch["answer"])
+
             results.extend([
                 {
                     "id": batch["id"][i],
@@ -188,7 +203,8 @@ class MultimodalSystem:
             ])
 
         end_time = time.time()
-        accuracy = correct / total_examples
+
+        metrics = self._calculate_metrics(all_generations, all_answers)
 
         output_dir = Path(datetime.now().strftime("%Y%m%d_%H%M%S"))
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -201,9 +217,8 @@ class MultimodalSystem:
             "max_new_tokens": max_new_tokens,
             "decoding_strategy": decoding_strategy,
             "total_examples": total_examples,
-            "correct": correct,
-            "accuracy": accuracy,
             "runtime": end_time - start_time,
+            **metrics
         }
 
         (output_dir / "config.json").write_text(
@@ -214,7 +229,7 @@ class MultimodalSystem:
             json.dumps(results, ensure_ascii=False, indent=4), encoding="utf-8"
         )
 
-        return accuracy
+        return metrics["accuracy"]
 
     def generate(
         self,
@@ -223,6 +238,7 @@ class MultimodalSystem:
         audios: list | str = None,
         max_new_tokens: int = 1,
         decoding_strategy: str = "greedy",
+        use_stcm: bool = False,
     ) -> list | str:
         """generate"""
         is_batch = isinstance(texts, list)
@@ -298,7 +314,7 @@ class MultimodalSystem:
 
             inputs = self.processor(
                 text=text_prompt,
-                audios=audios,
+                audios=audios if audios else None,
                 return_tensors="pt",
                 padding=True
             ).to(self.model.device)
@@ -322,7 +338,8 @@ class MultimodalSystem:
         output_text = self._generate_text(
             inputs,
             max_new_tokens=max_new_tokens,
-            decoding_strategy=decoding_strategy
+            decoding_strategy=decoding_strategy,
+            use_stcm=use_stcm
         )
         return output_text if is_batch else output_text[0]
 
@@ -330,7 +347,8 @@ class MultimodalSystem:
         self,
         inputs: dict,
         max_new_tokens: int = 1,
-        decoding_strategy: str = "greedy"
+        decoding_strategy: str = "greedy",
+        use_stcm: bool = False,
     ) -> str | list:
         strategy_params = {
             "greedy": {},
@@ -347,11 +365,19 @@ class MultimodalSystem:
         }
 
         params = strategy_params.get(decoding_strategy, {})
-        generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens, **params)
+        params["max_new_tokens"] = max_new_tokens
+        if use_stcm:
+            params["logits_processor"] = [self.stcm]
+
+        generated_ids = self.model.generate(**inputs, **params)
+
+        if use_stcm and max_new_tokens > 1:
+            return self.stcm.generate()
 
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
+
         return self.processor.batch_decode(
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
@@ -371,17 +397,25 @@ class MultimodalSystem:
         torch.cuda.empty_cache()
         gc.collect()
 
-    def _count_correct(self, generations: list, answers: list) -> float:
-        return sum(
-            1
-            for generation, answer in zip(generations, answers)
-            if re.fullmatch(r"[A-F]", generation)
-            and generation.upper() == answer.upper()
-        )
+    def _calculate_metrics(self, generations: list, answers: list) -> dict:
+        accuracy = accuracy_score(answers, generations)
+        f1 = f1_score(answers, generations, average="weighted", zero_division=1)
+        precision = precision_score(answers, generations, average="weighted", zero_division=1)
+        recall = recall_score(answers, generations, average="weighted", zero_division=1)
+
+        return {
+            "accuracy": accuracy,
+            "f1_score": f1,
+            "precision": precision,
+            "recall": recall
+        }
 
     def _get_model_config(self, tensor_type: str) -> dict:
         model_config = {}
-        if tensor_type != "fp16" and not self.is_audio_language_model:
+        if (
+            tensor_type in ["fp16", "bf16"] and not self.is_audio_language_model
+            and "meta-llama" not in self.model_name_or_path
+        ):
             model_config["attn_implementation"] = "flash_attention_2"
 
         dtype_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16}
