@@ -96,43 +96,71 @@ python experiment.py \
 
 ## 📊 Results
 
-### Different Method
-|   Method   |                     Model                      | Decoding Strategy | Model Size |  Accuracy  |  F1 Score  | Precision  |   Recall   |
-|:----------:|:----------------------------------------------:|:-----------------:|:----------:|:----------:|:----------:|:----------:|:----------:|
-|    VLM     |              Qwen2-VL-7B-Instruct              |   Greedy Search   |   8.29B    |   43.89%   |   51.76%   |   67.86%   |   43.89%   |
-|    ALM     |            Qwen2-Audio-7B-Instruct             |   Greedy Search   |   8.40B    |   30.22%   |   28.13%   |   42.83%   |   30.22%   |
-| VLM + ALM  | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |   Greedy Search   |   16.69B   |   52.33%   |   57.84%   |   66.95%   |   52.33%   |
-| VLM + ASR  | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   Greedy Search   |   9.10B    | **79.22%** | **79.27%** | **80.15%** | **79.22%** |
-| VLM + STCM |              Qwen2-VL-7B-Instruct              |   Greedy Search   |   8.29B    |   53.78%   |   52.01%   |   59.80%   |   53.78%   |
-| ALM + STCM |            Qwen2-Audio-7B-Instruct             |   Greedy Search   |   8.40B    |   36.67%   |   32.32%   |   37.77%   |   36.67%   |
+#### Performance Comparison Across Different Methods
+|    Method    |                     Model                      | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:------------:|:----------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
+|     VLM      |              Qwen2-VL-7B-Instruct              |   8.29B    |  43.89%  |  51.76%  |  67.86%   | 43.89% |
+|     ALM      |            Qwen2-Audio-7B-Instruct             |   8.40B    |  30.22%  |  28.13%  |  42.83%   | 30.22% |
+| VLM + Random |              Qwen2-VL-7B-Instruct              |   8.29B    |  51.89%  |  51.54%  |  51.40%   | 51.89% |
+| ALM + Random |            Qwen2-Audio-7B-Instruct             |   8.40B    |  35.22%  |  31.03%  |  35.59%   | 35.22% |
+|  VLM + ALM   | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |   16.69B   |  52.33%  |  57.84%  |  66.95%   | 52.33% |
+|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22%  |  79.27%  |  80.15%   | 79.22% |
 
-### Different Model
-|  Method   |                      Model                      | Decoding Strategy | Model Size |  Accuracy  |  F1 Score  | Precision  |   Recall   |
-|:---------:|:-----------------------------------------------:|:-----------------:|:----------:|:----------:|:----------:|:----------:|:----------:|
-| VLM + ASR | Phi-3.5-Vision-Instruc + Whisper-Large-V3-Turbo |   Greedy Search   |   4.96B    |   49.78%   |   49.27%   |   55.88%   |   49.78%   |
-| VLM + ASR |     LLaVA-v1.5-7B + Whisper-Large-V3-Turbo      |   Greedy Search   |   7.87B    |   31.89%   |   21.11%   |   65.70%   |   31.89%   |
-| VLM + ASR |  LLaVA-NeXT-Vicuna-7B + Whisper-Large-V3-Turbo  |   Greedy Search   |   8.38B    |   33.44%   |   25.50%   |   53.19%   |   33.44%   |
-| VLM + ASR | LLaVA-NeXT-Mistral-7B + Whisper-Large-V3-Turbo  |   Greedy Search   |   8.38B    |   41.00%   |   38.25%   |   55.63%   |   41.00%   |
-| VLM + ASR |      InternVL2-8B + Whisper-Large-V3-Turbo      |   Greedy Search   |   8.89B    |   78.00%   |   77.90%   |   78.24%   |   78.00%   |
-| VLM + ASR |      MiniCPM-v2.6 + Whisper-Large-V3-Turbo      |   Greedy Search   |   8.91B    |   75.78%   |   75.76%   |   75.88%   |   75.78%   |
-| VLM + ASR |  Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   Greedy Search   |   9.10B    | **79.22%** | **79.27%** | **80.15%** | **79.22%** |
-| VLM + ASR |      Idefics2-8B + Whisper-Large-V3-Turbo       |   Greedy Search   |   9.21B    |   34.67%   |   39.58%   |   48.66%   |   34.67%   |
-| VLM + ASR |   MiniCPM-Llama3-2.5 + Whisper-Large-V3-Turbo   |   Greedy Search   |   9.35B    |   62.22%   |   64.33%   |   67.24%   |   62.22%   |
-| VLM + ASR |     Paligemma2-10B + Whisper-Large-V3-Turbo     |   Greedy Search   |   10.47B   |    0.0%    |    0.0%    |    0.0%    |    0.0%    |
-| VLM + ASR |  Llama-3.2-11B-Vision-Instruct + Whisper-Small  |   Greedy Search   |   10.94B   |   53.33%   |   53.82%   |   63.01%   |   53.33%   |
+#### Performance Comparison Across Different Models
+|                      Model                      | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:-----------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
+| Phi-3.5-Vision-Instruc + Whisper-Large-V3-Turbo |   4.96B    |  49.78%  |  49.27%  |  55.88%   | 49.78% |
+|     LLaVA-v1.5-7B + Whisper-Large-V3-Turbo      |   7.87B    |  31.89%  |  21.08%  |  62.19%   | 31.89% |
+|  LLaVA-NeXT-Vicuna-7B + Whisper-Large-V3-Turbo  |   8.38B    |  33.56%  |  25.69%  |  53.81%   | 33.56% |
+| LLaVA-NeXT-Mistral-7B + Whisper-Large-V3-Turbo  |   8.38B    |  41.00%  |  38.25%  |  55.63%   | 41.00% |
+|      InternVL2-8B + Whisper-Large-V3-Turbo      |   8.89B    |  78.00%  |  77.90%  |  78.24%   | 78.00% |
+|      MiniCPM-v2.6 + Whisper-Large-V3-Turbo      |   8.91B    |  75.78%  |  75.76%  |  75.88%   | 75.78% |
+|  Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22%  |  79.27%  |  80.15%   | 79.22% |
+|      Idefics2-8B + Whisper-Large-V3-Turbo       |   9.21B    |  41.22%  |  41.08%  |  42.05%   | 41.22% |
+|   MiniCPM-Llama3-2.5 + Whisper-Large-V3-Turbo   |   9.35B    |  63.89%  |  63.85%  |  64.40%   | 63.89% |
+|     Paligemma2-10B + Whisper-Large-V3-Turbo     |   10.47B   |  24.33%  |  24.72%  |  25.63%   | 24.33% |
+|  Llama-3.2-11B-Vision-Instruct + Whisper-Small  |   10.94B   |  54.33%  |  53.78%  |  61.12%   | 54.33% |
 
-### Decoding Strategies
-|  Method   |                Model                 |        Decoding Strategy         | Model Size |  Accuracy  |  F1 Score  | Precision  |   Recall   |
-|:---------:|:------------------------------------:|:--------------------------------:|:----------:|:----------:|:----------:|:----------:|:----------:|
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |          Greedy Search           |   9.10B    |   79.22%   |   79.27%   |   80.15%   |   79.22%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |        Contrastive Search        |   9.10B    |   79.22%   |   79.27%   |   80.15%   |   79.22%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |       Multinomial Sampling       |   9.10B    |   79.22%   |   79.27%   |   80.15%   |   79.22%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |           Beam Search            |   9.10B    |   61.67%   |   61.59%   |   64.35%   |   61.67%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo | Beam Search Multinomial Sampling |   9.10B    |   61.67%   |   61.59%   |   64.35%   |   61.67%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |       Diverse Beam Search        |   9.10B    |   61.67%   |   61.59%   |   64.35%   |   61.67%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |           DoLa (High)            |   9.10B    |   58.11%   |   58.18%   |   68.29%   |   58.11%   |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |            DoLa (Low)            |   9.10B    | **79.89%** | **79.85%** | **80.91%** | **79.89%** |
-| VLM + ASR | Qwen2-VL-7B + Whisper-Large-V3-Turbo |         Self-Speculative         |   9.10B    |   79.67%   |   79.69%   |   80.48%   |   79.67%   |
+#### Performance Comparison Across Decoding Strategies
+|                     Model                     |        Decoding Strategy         | Model Size |  Accuracy  |  F1 Score  | Precision  |   Recall   |
+|:---------------------------------------------:|:--------------------------------:|:----------:|:----------:|:----------:|:----------:|:----------:|
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |          Greedy Search           |   9.10B    |   79.22%   |   79.27%   |   80.15%   |   79.22%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        Contrastive Search        |   9.10B    |   79.22%   |   79.27%   |   80.15%   |   79.22%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |       Multinomial Sampling       |   9.10B    |   79.22%   |   79.27%   |   80.15%   |   79.22%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |           Beam Search            |   9.10B    |   61.67%   |   61.59%   |   64.35%   |   61.67%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo | Beam Search Multinomial Sampling |   9.10B    |   61.67%   |   61.59%   |   64.35%   |   61.67%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |       Diverse Beam Search        |   9.10B    |   61.67%   |   61.59%   |   64.35%   |   61.67%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |         Self-Speculative         |   9.10B    |   79.67%   |   79.69%   |   80.48%   |   79.67%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |           DoLa (High)            |   9.10B    |   58.11%   |   58.18%   |   68.29%   |   58.11%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            DoLa (Low)            |   9.10B    |   79.89%   |   79.85%   |   80.91%   |   79.89%   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        DoLa (Low) + STCM         |   9.10B    | **80.22%** | **80.18%** | **81.24%** | **80.22%** |
+
+### ✨ Selective Token Constraint Mechanism (STCM)
+
+#### Performance Comparison with and without STCM
+|      Method      |                     Model                      | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:----------------:|:----------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
+|       VLM        |              Qwen2-VL-7B-Instruct              |   8.29B    |  43.89%  |  51.76%  |  67.86%   | 43.89% |
+|       ALM        |            Qwen2-Audio-7B-Instruct             |   8.40B    |  30.22%  |  28.13%  |  42.83%   | 30.22% |
+|   VLM + Random   |              Qwen2-VL-7B-Instruct              |   8.29B    |  51.89%  |  51.54%  |  51.40%   | 51.89% |
+|   ALM + Random   |            Qwen2-Audio-7B-Instruct             |   8.40B    |  35.22%  |  31.03%  |  35.59%   | 35.22% |
+|    VLM + STCM    |              Qwen2-VL-7B-Instruct              |   8.29B    |  53.78%  |  52.01%  |  59.80%   | 53.78% |
+|    ALM + STCM    |            Qwen2-Audio-7B-Instruct             |   8.40B    |  36.67%  |  32.32%  |  37.77%   | 36.67% |
+|    VLM + ALM     | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |   16.69B   |  52.33%  |  57.84%  |  66.95%   | 52.33% |
+|    VLM + ASR     | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22%  |  79.27%  |  80.15%   | 79.22% |
+| VLM + ASR + STCM | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.33%  |  79.34%  |  80.13%   | 79.33% |
+
+#### Performance Comparison with and without STCM Across Models
+|      Method      |                     Model                     | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:----------------:|:---------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
+|    VLM + ASR     |     Idefics2-8B + Whisper-Large-V3-Turbo      |   9.21B    |  41.22%  |  41.08%  |  42.05%   | 41.22% |
+| VLM + ASR + STCM |     Idefics2-8B + Whisper-Large-V3-Turbo      |   9.21B    |  42.33%  |  42.50%  |  43.26%   | 42.33% |
+|    VLM + ASR     | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |   9.10B    |  79.22%  |  79.27%  |  80.15%   | 79.22% |
+| VLM + ASR + STCM | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |   9.10B    |  79.33%  |  79.34%  |  80.13%   | 79.33% |
+|    VLM + ASR     |    Paligemma2-10B + Whisper-Large-V3-Turbo    |   10.47B   |  24.33%  |  24.72%  |  25.63%   | 24.33% |
+| VLM + ASR + STCM |    Paligemma2-10B + Whisper-Large-V3-Turbo    |   10.47B   |  27.89%  |  12.51%  |  25.08%   | 27.89% |
+|    VLM + ASR     | Llama-3.2-11B-Vision-Instruct + Whisper-Small |   10.94B   |  54.33%  |  53.78%  |  61.12%   | 54.33% |
+| VLM + ASR + STCM | Llama-3.2-11B-Vision-Instruct + Whisper-Small |   10.94B   |  55.44%  |  55.08%  |  64.79%   | 55.44% |
 
 ## 🙏 Acknowledgements
 
