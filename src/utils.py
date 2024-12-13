@@ -4,6 +4,7 @@ import random
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
+
 def calculate_metrics(
     all_choices: list,
     all_answers: list,
@@ -67,7 +68,6 @@ def parse_multi_choice_response(
             pred_index = random.choice(all_choices)
         else:
             pred_index = ""
-
 
     elif len(candidates) > 1:
         start_indexes = []

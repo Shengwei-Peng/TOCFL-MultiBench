@@ -53,11 +53,7 @@ class MultimodalSystem:
         self.asr_model_name_or_path = ""
         self.dataset_name_or_path = ""
         self.asr_model = None
-
-        df = self.load(
-            tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path
-        )
-        print(tabulate(df, headers="keys", tablefmt="pretty", showindex=False))
+        self.load(tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path)
 
     def load(
         self,
@@ -158,13 +154,13 @@ class MultimodalSystem:
             ])
 
         self.stcm = STCM(allowed_tokens=self.all_choices, tokenizer=self.processor.tokenizer)
-
-        return pd.DataFrame(
+        df = pd.DataFrame(
             {
                 "Model name": [self.model_name_or_path],
                 "ASR Model name": [self.asr_model_name_or_path],
                 "Dataset name": [self.dataset_name_or_path],
                 "Tensor type": [self.tensor_type],
+                "Dataset size": [len(self.dataset)],
                 "Model size": [
                     f"{sum(p.numel() for p in self.model.parameters()) / 1e9:.2f}B"
                 ] if not self.is_lmdeploy_model else [None],
@@ -174,22 +170,22 @@ class MultimodalSystem:
                 ],
             }
         )
+        print(tabulate(df, headers="keys", tablefmt="pretty", showindex=False))
+        return df
 
     def evaluate(
         self,
-        batch_size: int = 1,
         max_new_tokens: int = 1,
         decoding_strategy: str = "greedy",
         use_stcm: bool = False,
-    ) -> float:
+    ) -> pd.DataFrame:
         """evaluate"""
         total_examples = len(self.dataset)
-
+        batch_size = 1
         results = []
         all_response = []
         all_answers = []
         all_index2ans = []
-        index2ans = {choice: "" for choice in self.all_choices}
 
         start_time = time.time()
         for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
@@ -205,7 +201,7 @@ class MultimodalSystem:
 
             batch_index2ans = (
                 batch["index2ans"] if "index2ans" in batch.column_names
-                else [index2ans] * len(batch["id"])
+                else [None] * len(batch["id"])
             )
 
             all_response.extend(generations)
@@ -256,7 +252,9 @@ class MultimodalSystem:
             json.dumps(results, ensure_ascii=False, indent=4), encoding="utf-8"
         )
 
-        return metrics["accuracy"]
+        metrics_df = pd.DataFrame([{key: round(value * 100, 2) for key, value in metrics.items()}])
+        print(tabulate(metrics_df, headers="keys", tablefmt="pretty", showindex=False))
+        return metrics_df
 
     def generate(
         self,
