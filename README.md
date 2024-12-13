@@ -1,7 +1,7 @@
 # TOCFL-MultiBench: A Multimodal Benchmark for Evaluating Chinese Language Proficiency
 
 ## 🌟 Overview
-TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Chinese language proficiency across diverse dimensions. It is inspired by the Test of Chinese as a Foreign Language (TOCFL) and integrates deep learning techniques to assess proficiency through multimodal data, including text, audio, and visual inputs.
+TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Chinese language proficiency through multiple-choice questions. Inspired by the Test of Chinese as a Foreign Language (TOCFL), it incorporates deep learning techniques to assess proficiency using multimodal data such as text, audio, and visual inputs. The benchmark introduces a novel method called Selective Token Constraint Mechanism (STCM), which enhances decoding stability and performance on multiple-choice questions without additional computational cost or fine-tuning.
 
 ## 💻 Installation
 
@@ -9,6 +9,7 @@ TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Ch
 
 - Python 3.12.7
 - CUDA 12.4
+- GPU with 24GB+ VRAM recommended
 
 ### Steps
 
@@ -27,6 +28,16 @@ TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Ch
     ```sh
     pip install -r requirements.txt
     ```
+
+3. Download the TOCFL-MultiBench and place it in the appropriate directory. You can either:
+
+   - Download it manually from [this link](https://drive.google.com/file/d/1hspOJO9e5-m_0GFU84RKmzx9Np8RRZrA/view?usp=drive_link)  
+   - Or use `gdown`:
+
+     ```bash
+     pip install gdown
+     gdown https://drive.google.com/uc?id=1hspOJO9e5-m_0GFU84RKmzx9Np8RRZrA
+     ```
 
 ## 🛠️ Usage
 
@@ -111,6 +122,9 @@ python experiment.py \
 ## 📊 Results
 
 #### Performance Comparison Across Different Methods
+<details>
+  <summary>Show/Hide Results Table</summary>
+
 |    Method    |                     Model                      | Model Size | Accuracy | F1 Score | Precision | Recall |
 |:------------:|:----------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
 |     VLM      |              Qwen2-VL-7B-Instruct              |   8.29B    |  43.89   |  51.76   |   67.86   | 43.89  |
@@ -119,8 +133,12 @@ python experiment.py \
 | ALM + Random |            Qwen2-Audio-7B-Instruct             |   8.40B    |  35.22   |  31.03   |   35.59   | 35.22  |
 |  VLM + ALM   | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |   16.69B   |  52.33   |  57.84   |   66.95   | 52.33  |
 |  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
+</details>
 
 #### Performance Comparison Across Different Models
+<details>
+  <summary>Show/Hide Results Table</summary>
+
 |                      Model                      | Model Size | Accuracy | F1 Score | Precision | Recall |
 |:-----------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
 | Phi-3.5-Vision-Instruc + Whisper-Large-V3-Turbo |   4.96B    |  49.78   |  49.27   |   55.88   | 49.78  |
@@ -134,8 +152,12 @@ python experiment.py \
 |   MiniCPM-Llama3-2.5 + Whisper-Large-V3-Turbo   |   9.35B    |  63.89   |  63.85   |   64.40   | 63.89  |
 |     Paligemma2-10B + Whisper-Large-V3-Turbo     |   10.47B   |  24.33   |  24.72   |   25.63   | 24.33  |
 |  Llama-3.2-11B-Vision-Instruct + Whisper-Small  |   10.94B   |  54.33   |  53.78   |   61.12   | 54.33  |
+</details>
 
 #### Performance Comparison Across Decoding Strategies
+<details>
+  <summary>Show/Hide Results Table</summary>
+
 |                     Model                     |        Decoding Strategy         | Model Size | Accuracy  | F1 Score  | Precision |  Recall   |
 |:---------------------------------------------:|:--------------------------------:|:----------:|:---------:|:---------:|:---------:|:---------:|
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |          Greedy Search           |   9.10B    |   79.22   |   79.27   |   80.15   |   79.22   |
@@ -148,43 +170,64 @@ python experiment.py \
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |           DoLa (High)            |   9.10B    |   58.11   |   58.18   |   68.29   |   58.11   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            DoLa (Low)            |   9.10B    |   79.89   |   79.85   |   80.91   |   79.89   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        DoLa (Low) + STCM         |   9.10B    | **80.22** | **80.18** | **81.24** | **80.22** |
+</details>
 
 ### ✨ Selective Token Constraint Mechanism (STCM)
 
 #### Performance Comparison with and without STCM
-|      Method      |                     Model                      | Model Size | Accuracy | F1 Score | Precision | Recall |
-|:----------------:|:----------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
-|       VLM        |              Qwen2-VL-7B-Instruct              |   8.29B    |  43.89   |  51.76   |   67.86   | 43.89  |
-|       ALM        |            Qwen2-Audio-7B-Instruct             |   8.40B    |  30.22   |  28.13   |   42.83   | 30.22  |
-|   VLM + Random   |              Qwen2-VL-7B-Instruct              |   8.29B    |  51.89   |  51.54   |   51.40   | 51.89  |
-|   ALM + Random   |            Qwen2-Audio-7B-Instruct             |   8.40B    |  35.22   |  31.03   |   35.59   | 35.22  |
-|    VLM + STCM    |              Qwen2-VL-7B-Instruct              |   8.29B    |  53.78   |  52.01   |   59.80   | 53.78  |
-|    ALM + STCM    |            Qwen2-Audio-7B-Instruct             |   8.40B    |  36.67   |  32.32   |   37.77   | 36.67  |
-|    VLM + ALM     | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |   16.69B   |  52.33   |  57.84   |   66.95   | 52.33  |
-|    VLM + ASR     | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
-| VLM + ASR + STCM | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
+<details>
+  <summary>Show/Hide Results Table</summary>
+
+|    Method    |                     Model                      | STCM | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:------------:|:----------------------------------------------:|:----:|:----------:|:--------:|:--------:|:---------:|:------:|
+|     VLM      |              Qwen2-VL-7B-Instruct              |      |   8.29B    |  43.89   |  51.76   |   67.86   | 43.89  |
+|     ALM      |            Qwen2-Audio-7B-Instruct             |      |   8.40B    |  30.22   |  28.13   |   42.83   | 30.22  |
+| VLM + Random |              Qwen2-VL-7B-Instruct              |      |   8.29B    |  51.89   |  51.54   |   51.40   | 51.89  |
+| ALM + Random |            Qwen2-Audio-7B-Instruct             |      |   8.40B    |  35.22   |  31.03   |   35.59   | 35.22  |
+|     VLM      |              Qwen2-VL-7B-Instruct              |  ✅  |   8.29B    |  53.78   |  52.01   |   59.80   | 53.78  |
+|     ALM      |            Qwen2-Audio-7B-Instruct             |  ✅  |   8.40B    |  36.67   |  32.32   |   37.77   | 36.67  |
+|  VLM + ALM   | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |      |   16.69B   |  52.33   |  57.84   |   66.95   | 52.33  |
+|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |      |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
+|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |  ✅  |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
+
+</details>
 
 #### Performance Comparison with and without STCM Across Models
-|      Method      |                     Model                     | Model Size | Accuracy | F1 Score | Precision | Recall |
-|:----------------:|:---------------------------------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
-|    VLM + ASR     |     Idefics2-8B + Whisper-Large-V3-Turbo      |   9.21B    |  41.22   |  41.08   |   42.05   | 41.22  |
-| VLM + ASR + STCM |     Idefics2-8B + Whisper-Large-V3-Turbo      |   9.21B    |  42.33   |  42.50   |   43.26   | 42.33  |
-|    VLM + ASR     | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
-| VLM + ASR + STCM | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
-|    VLM + ASR     |    Paligemma2-10B + Whisper-Large-V3-Turbo    |   10.47B   |  24.33   |  24.72   |   25.63   | 24.33  |
-| VLM + ASR + STCM |    Paligemma2-10B + Whisper-Large-V3-Turbo    |   10.47B   |  27.89   |  12.51   |   25.08   | 27.89  |
-|    VLM + ASR     | Llama-3.2-11B-Vision-Instruct + Whisper-Small |   10.94B   |  54.33   |  53.78   |   61.12   | 54.33  |
-| VLM + ASR + STCM | Llama-3.2-11B-Vision-Instruct + Whisper-Small |   10.94B   |  55.44   |  55.08   |   64.79   | 55.44  |
+<details>
+  <summary>Show/Hide Results Table</summary>
+
+|                     Model                     | STCM | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:---------------------------------------------:|:----:|:----------:|:--------:|:--------:|:---------:|:------:|
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |      |   10.47B   |  24.33%  |  24.72%  |  25.63%   | 24.33% |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |  ✅  |   10.47B   |  27.89%  |  12.51%  |  25.08%   | 27.89% |
+|     Idefics2-8B + Whisper-Large-V3-Turbo      |      |   9.21B    |  41.22%  |  41.08%  |  42.05%   | 41.22% |
+|     Idefics2-8B + Whisper-Large-V3-Turbo      |  ✅  |   9.21B    |  42.33%  |  42.50%  |  43.26%   | 42.33% |
+| Llama-3.2-11B-Vision-Instruct + Whisper-Small |      |   10.94B   |  54.33%  |  53.78%  |  61.12%   | 54.33% |
+| Llama-3.2-11B-Vision-Instruct + Whisper-Small |  ✅  |   10.94B   |  55.44%  |  55.08%  |  64.79%   | 55.44% |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |      |   9.10B    |  79.22%  |  79.27%  |  80.15%   | 79.22% |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |  ✅  |   9.10B    |  79.33%  |  79.34%  |  80.13%   | 79.33% |
+
+</details>
 
 #### Performance Comparison with and without STCM Across Benchmarks
-|   Method   |        Model         | Benchmark | Model Size | Accuracy | F1 Score | Precision | Recall |
-|:----------:|:--------------------:|:---------:|:----------:|:--------:|:--------:|:---------:|:------:|
-|    VLM     | Qwen2-VL-7B-Instruct | CII-Bench |   8.29B    |  48.89   |  48.19   |   53.77   | 48.89  |
-| VLM + STCM | Qwen2-VL-7B-Instruct | CII-Bench |   8.29B    |  50.59   |  50.68   |   53.74   | 50.59  |
-|    VLM     | Qwen2-VL-7B-Instruct |  MMStar   |   8.29B    |  28.20   |  28.24   |   28.61   | 28.20  |
-| VLM + STCM | Qwen2-VL-7B-Instruct |  MMStar   |   8.29B    |  54.87   |  55.05   |   56.11   | 54.87  |
-|    VLM     | Qwen2-VL-7B-Instruct |  MMBench  |   8.29B    |  54.56   |  54.32   |   54.90   | 54.56  |
-| VLM + STCM | Qwen2-VL-7B-Instruct |  MMBench  |   8.29B    |  66.72   |  66.58   |   68.08   | 66.72  |
+<details>
+  <summary>Show/Hide Results Table</summary>
+
+|        Model         | Benchmark | STCM | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:--------------------:|:---------:| ---- |:----------:|:--------:|:--------:|:---------:|:------:|
+| Qwen2-VL-7B-Instruct | CII-Bench |      |   8.29B    |  48.89   |  48.19   |   53.77   | 48.89  |
+| Qwen2-VL-7B-Instruct | CII-Bench | ✅   |   8.29B    |  50.59   |  50.68   |   53.74   | 50.59  |
+| Qwen2-VL-7B-Instruct |  MMStar   |      |   8.29B    |  28.20   |  28.24   |   28.61   | 28.20  |
+| Qwen2-VL-7B-Instruct |  MMStar   | ✅   |   8.29B    |  54.87   |  55.05   |   56.11   | 54.87  |
+| Qwen2-VL-7B-Instruct |  MMBench  |      |   8.29B    |  54.51   |  54.30   |   54.90   | 54.51  |
+| Qwen2-VL-7B-Instruct |  MMBench  | ✅   |   8.29B    |  66.72   |  66.58   |   68.08   | 66.72  |
+|    Paligemma2-10B    | CII-Bench |      |   10.7B    |  19.35   |  13.14   |   17.27   | 19.35  |
+|    Paligemma2-10B    | CII-Bench | ✅   |   10.7B    |  19.35   |  16.19   |   24.75   | 19.35  |
+|    Paligemma2-10B    |  MMStar   |      |   10.7B    |  26.67   |  26.84   |   27.16   | 26.67  |
+|    Paligemma2-10B    |  MMStar   | ✅   |   10.7B    |  32.27   |  29.34   |   31.65   | 32.27  |
+|    Paligemma2-10B    |  MMBench  |      |   10.7B    |   27.3   |  27.04   |   27.48   |  27.3  |
+|    Paligemma2-10B    |  MMBench  | ✅   |   10.7B    |  28.24   |  20.81   |   38.91   | 28.24  |
+</details>
 
 ## 🙏 Acknowledgements
 
