@@ -12,7 +12,6 @@ import lmdeploy
 import pandas as pd
 import torch
 from PIL import Image
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from tabulate import tabulate
 from tqdm.auto import tqdm
 from datasets import Dataset, load_dataset
@@ -30,6 +29,7 @@ from transformers import (
 )
 
 from .stcm import STCM
+from .utils import calculate_metrics
 
 logging.set_verbosity_error()
 warnings.filterwarnings("ignore")
@@ -47,7 +47,7 @@ class MultimodalSystem:
         """__init__"""
         set_seed(11207330)
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
-        self.prompt = "僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n"
+        self.prompt = ""
         self.tensor_type = ""
         self.model_name_or_path = ""
         self.asr_model_name_or_path = ""
@@ -108,10 +108,6 @@ class MultimodalSystem:
                         **self._get_model_config(tensor_type)
                     ).eval()
 
-                self.stcm = STCM(
-                    allowed_tokens=["A", "B", "C", "D"], tokenizer=self.processor.tokenizer
-                )
-
                 self.model.generation_config.pad_token_id = self.processor.tokenizer.pad_token_id
 
         if asr_model_name_or_path is not None and (
@@ -135,15 +131,33 @@ class MultimodalSystem:
 
         if dataset_name_or_path != self.dataset_name_or_path:
             self.dataset_name_or_path = dataset_name_or_path
-            dataset = load_dataset(
-                "json",
-                data_files=self.dataset_name_or_path,
-                split="train",
-            )
+
+            if self.dataset_name_or_path == "m-a-p/CII-Bench":
+                dataset = load_dataset(self.dataset_name_or_path, split="test")
+                self.all_choices = ["A", "B", "C", "D", "E", "F"]
+
+            elif self.dataset_name_or_path == "Lin-Chen/MMStar":
+                dataset = load_dataset(self.dataset_name_or_path, split="val")
+                self.all_choices = ["A", "B", "C", "D"]
+
+            elif self.dataset_name_or_path == "lmms-lab/MMBench":
+                dataset = load_dataset(self.dataset_name_or_path, "cc", split="test")
+                self.all_choices = ["A", "B", "C", "D"]
+
+            else:
+                dataset = load_dataset(
+                    "json",
+                    data_files=self.dataset_name_or_path,
+                    split="train",
+                )
+                self.all_choices = ["A", "B", "C", "D"]
+
             self.dataset = Dataset.from_list([
                 self._preprocess(example)
                 for example in tqdm(dataset, desc="Processing dataset", unit="example")
             ])
+
+        self.stcm = STCM(allowed_tokens=self.all_choices, tokenizer=self.processor.tokenizer)
 
         return pd.DataFrame(
             {
@@ -172,8 +186,10 @@ class MultimodalSystem:
         total_examples = len(self.dataset)
 
         results = []
-        all_generations = []
+        all_response = []
         all_answers = []
+        all_index2ans = []
+        index2ans = {choice: "" for choice in self.all_choices}
 
         start_time = time.time()
         for start_idx in tqdm(range(0, total_examples, batch_size), desc="Evaluating"):
@@ -187,24 +203,34 @@ class MultimodalSystem:
                 use_stcm = use_stcm,
             )
 
-            all_generations.extend([generation.strip().upper() for generation in generations])
+            batch_index2ans = (
+                batch["index2ans"] if "index2ans" in batch.column_names
+                else [index2ans] * len(batch["id"])
+            )
+
+            all_response.extend(generations)
             all_answers.extend(batch["answer"])
+            all_index2ans.extend(batch_index2ans)
 
             results.extend([
                 {
                     "id": batch["id"][i],
                     "question": batch["question"][i],
-                    "image": batch["image"][i],
-                    "audio": batch["audio"][i],
                     "generation": generations[i],
                     "answer": batch["answer"][i],
+                    "index2ans": batch_index2ans[i],
                 }
                 for i in range(len(batch["id"]))
             ])
 
         end_time = time.time()
 
-        metrics = self._calculate_metrics(all_generations, all_answers)
+        metrics = calculate_metrics(
+            all_choices=self.all_choices,
+            all_answers=all_answers,
+            all_response=all_response,
+            all_index2ans=all_index2ans
+        )
 
         output_dir = Path(datetime.now().strftime("%Y%m%d_%H%M%S"))
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -216,6 +242,7 @@ class MultimodalSystem:
             "dataset_name_or_path": self.dataset_name_or_path,
             "max_new_tokens": max_new_tokens,
             "decoding_strategy": decoding_strategy,
+            "use_stcm": use_stcm,
             "total_examples": total_examples,
             "runtime": end_time - start_time,
             **metrics
@@ -273,6 +300,8 @@ class MultimodalSystem:
             for i, image in enumerate(images):
                 if isinstance(image, str):
                     images[i] = Image.open(image).convert("RGB")
+                elif isinstance(image, Image.Image):
+                    images[i] = image.convert("RGB")
                 elif image is None and requires_image:
                     images[i] = Image.new("RGB", (224, 224), (255, 255, 255))
 
@@ -371,7 +400,7 @@ class MultimodalSystem:
 
         generated_ids = self.model.generate(**inputs, **params)
 
-        if use_stcm and max_new_tokens > 1:
+        if use_stcm:
             return self.stcm.generate()
 
         generated_ids_trimmed = [
@@ -383,12 +412,48 @@ class MultimodalSystem:
         )
 
     def _preprocess(self, example: dict) -> dict:
-        example["question"] = (
-            f"{example['instruction']}\n"
-            + f"{example['question']}\n"
-            + "".join(example[f"option{i + 1}"] for i in range(4)) + "\n"
-            + self.prompt
-        )
+
+        if "audio" not in example:
+            example["audio"] = None
+
+        if "TOCFL-MultiBench" in self.dataset_name_or_path:
+            example["question"] = (
+                f"{example['instruction']}\n"
+                + f"{example['question']}\n"
+                + "".join(example[f"option{i + 1}"] for i in range(len(self.all_choices))) + "\n"
+                + "僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n"
+            )
+
+        elif self.dataset_name_or_path == "m-a-p/CII-Bench":
+            options = "\n".join(
+                f"({self.all_choices[i]}) {example[f'option{i + 1}']}"
+                for i in range(len(self.all_choices))
+            )
+            example["question"] = (
+                "请根据提供的图片尝试回答下面的单选题。直接回答正确选项，不要包含额外的解释。"
+                + "请使用以下格式：“答案：$LETTER”，其中$LETTER是你认为正确答案的字母。\n\n"
+                + f"{example['question']}\n"
+                + f"{options}\n\n"
+                + "答案："
+            )
+            example["index2ans"] = {
+                label: example[f"option{idx + 1}"]
+                for idx, label in enumerate(self.all_choices)
+            }
+
+        elif self.dataset_name_or_path == "Lin-Chen/MMStar":
+            example["id"] = example["index"]
+
+        elif self.dataset_name_or_path == "lmms-lab/MMBench":
+            example["id"] = example["index"]
+            options = "\n".join(f"({i}) {example[i]}" for i in self.all_choices)
+            example["question"] = f"{example['question']}\n{options}\n"
+            example["index2ans"] = {
+                key: example[key] for key in self.all_choices if key in example
+            }
+
+        example["question"] += self.prompt
+
         return example
 
     def _clear_resources(self, name: str) -> None:
@@ -396,19 +461,6 @@ class MultimodalSystem:
             delattr(self, name)
         torch.cuda.empty_cache()
         gc.collect()
-
-    def _calculate_metrics(self, generations: list, answers: list) -> dict:
-        accuracy = accuracy_score(answers, generations)
-        f1 = f1_score(answers, generations, average="weighted", zero_division=1)
-        precision = precision_score(answers, generations, average="weighted", zero_division=1)
-        recall = recall_score(answers, generations, average="weighted", zero_division=1)
-
-        return {
-            "accuracy": accuracy,
-            "f1_score": f1,
-            "precision": precision,
-            "recall": recall
-        }
 
     def _get_model_config(self, tensor_type: str) -> dict:
         model_config = {}
