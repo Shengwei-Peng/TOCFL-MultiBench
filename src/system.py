@@ -41,28 +41,47 @@ class MultimodalSystem:
         self,
         model_name_or_path: str,
         dataset_name_or_path: str,
-        tensor_type: str,
         asr_model_name_or_path: str | None = None,
+        prompt_template_path: str | None = None,
+        tensor_type: str = "auto",
     ) -> None:
         """__init__"""
         set_seed(11207330)
         login(token=os.getenv("HUGGINGFACE_TOKEN"))
-        self.prompt = ""
-        self.tensor_type = ""
-        self.model_name_or_path = ""
-        self.asr_model_name_or_path = ""
-        self.dataset_name_or_path = ""
-        self.asr_model = None
-        self.load(tensor_type, model_name_or_path, asr_model_name_or_path, dataset_name_or_path)
+        self.model_name_or_path: str = ""
+        self.dataset_name_or_path: str = ""
+        self.asr_model_name_or_path: str = ""
+        self.prompt_template_path: str = ""
+        self.tensor_type: str = ""
+
+        self.load(
+            model_name_or_path = model_name_or_path,
+            dataset_name_or_path = dataset_name_or_path,
+            asr_model_name_or_path = asr_model_name_or_path,
+            prompt_template_path = prompt_template_path,
+            tensor_type = tensor_type,
+        )
 
     def load(
         self,
-        tensor_type: str,
         model_name_or_path: str,
-        asr_model_name_or_path: str,
-        dataset_name_or_path: str
+        dataset_name_or_path: str,
+        asr_model_name_or_path: str | None = None,
+        prompt_template_path: str | None = None,
+        tensor_type: str = "auto",
     ) -> pd.DataFrame:
         """load"""
+
+        if prompt_template_path != self.prompt_template_path and prompt_template_path is not None:
+            self.prompt_template_path = prompt_template_path
+            try:
+                with Path(prompt_template_path).open("r", encoding="utf-8") as file:
+                    self.prompt_template = file.read()
+            except (FileNotFoundError, IOError) as e:
+                raise RuntimeError(f"Failed to load the prompt template: {e}") from e
+        elif prompt_template_path is None:
+            self.prompt_template = "{question}"
+
         if model_name_or_path != self.model_name_or_path or tensor_type != self.tensor_type:
             self._clear_resources(model_name_or_path)
             self.tensor_type = tensor_type
@@ -124,6 +143,8 @@ class MultimodalSystem:
                 tokenizer=asr_processor.tokenizer,
                 feature_extractor=asr_processor.feature_extractor
             )
+        elif asr_model_name_or_path is None:
+            self.asr_model = None
 
         if dataset_name_or_path != self.dataset_name_or_path:
             self.dataset_name_or_path = dataset_name_or_path
@@ -156,9 +177,10 @@ class MultimodalSystem:
         self.stcm = STCM(allowed_tokens=self.all_choices, tokenizer=self.processor.tokenizer)
         df = pd.DataFrame(
             {
-                "Model name": [self.model_name_or_path],
-                "ASR Model name": [self.asr_model_name_or_path],
-                "Dataset name": [self.dataset_name_or_path],
+                "Model": [self.model_name_or_path],
+                "ASR Model": [self.asr_model_name_or_path],
+                "Dataset": [self.dataset_name_or_path],
+                "Prompt": [self.prompt_template_path],
                 "Tensor type": [self.tensor_type],
                 "Dataset size": [len(self.dataset)],
                 "Model size": [
@@ -241,6 +263,7 @@ class MultimodalSystem:
             "use_stcm": use_stcm,
             "total_examples": total_examples,
             "runtime": end_time - start_time,
+            "prompt_template": self.prompt_template,
             **metrics
         }
 
@@ -418,8 +441,7 @@ class MultimodalSystem:
             example["question"] = (
                 f"{example['instruction']}\n"
                 + f"{example['question']}\n"
-                + "".join(example[f"option{i + 1}"] for i in range(len(self.all_choices))) + "\n"
-                + "僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n"
+                + "".join(example[f"option{i + 1}"] for i in range(len(self.all_choices)))
             )
 
         elif self.dataset_name_or_path == "m-a-p/CII-Bench":
@@ -450,7 +472,7 @@ class MultimodalSystem:
                 key: example[key] for key in self.all_choices if key in example
             }
 
-        example["question"] += self.prompt
+        example["question"] = self.prompt_template.format(question=example["question"])
 
         return example
 

@@ -1,4 +1,5 @@
 """interface"""
+from pathlib import Path
 from argparse import ArgumentParser
 
 import gradio as gr
@@ -7,12 +8,14 @@ from dotenv import load_dotenv
 from src import MultimodalSystem
 
 
+
 def main() -> None:
     """main"""
     parser = ArgumentParser()
     parser.add_argument(
         "--dataset_name_or_path", type=str, default="TOCFL-MultiBench/TOCFL-MultiBench.json"
     )
+    parser.add_argument("--prompt_dir", type=str, default="prompt")
     args = parser.parse_args()
 
     model_options = [
@@ -39,8 +42,19 @@ def main() -> None:
         "diverse_beam_search", "self_speculative", "dola_high", "dola_low",
     ]
     tensor_type_options = ["auto", "fp16", "bf16", "int8", "fp4", "nf4"]
+
+    prompt_options = [None]
+    if args.prompt_dir:
+        prompt_path = Path(args.prompt_dir)
+        if prompt_path.is_dir():
+            prompt_options.extend([str(path) for path in prompt_path.glob("*.txt")])
+
     system = MultimodalSystem(
-        model_options[0], dataset_options[-1], tensor_type_options[0], asr_model_options[0]
+        model_name_or_path=model_options[0],
+        dataset_name_or_path=dataset_options[-1],
+        asr_model_name_or_path=asr_model_options[0],
+        prompt_template_path=prompt_options[0],
+        tensor_type=tensor_type_options[0]
     )
 
     interface = gr.Blocks()
@@ -49,15 +63,20 @@ def main() -> None:
             "# TOCFL-MultiBench: A Multimodal Benchmark for Evaluating Chinese Language Proficiency"
         )
 
+        model_dropdown = gr.Dropdown(
+            choices=model_options,
+            label="Select Model",
+            value=model_options[0]
+        )
         dataset_dropdown = gr.Dropdown(
             choices=dataset_options,
             label="Select Dataset",
             value=dataset_options[-1],
         )
-        model_dropdown = gr.Dropdown(
-            choices=model_options,
-            label="Select Model",
-            value=model_options[0]
+        prompt_dropdown = gr.Dropdown(
+            choices=prompt_options,
+            label="Select Prompt",
+            value=prompt_options[0],
         )
         asr_model_dropdown = gr.Dropdown(
             choices=asr_model_options,
@@ -73,7 +92,13 @@ def main() -> None:
         load_output = gr.Dataframe(label="Load")
         load_button.click(
             fn=system.load,
-            inputs=[tensor_type_dropdown, model_dropdown, asr_model_dropdown, dataset_dropdown],
+            inputs=[
+                model_dropdown,
+                dataset_dropdown,
+                asr_model_dropdown,
+                prompt_dropdown,
+                tensor_type_dropdown
+            ],
             outputs=load_output
         )
 
@@ -95,7 +120,9 @@ def main() -> None:
         evaluate_button.click(
             fn=system.evaluate,
             inputs=[
-                max_new_tokens_slider, decoding_strategy_dropdown, use_stcm_checkbox
+                max_new_tokens_slider,
+                decoding_strategy_dropdown,
+                use_stcm_checkbox
             ],
             outputs=evaluate_output,
         )

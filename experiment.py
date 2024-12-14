@@ -11,6 +11,7 @@ def main():
     parser.add_argument("--model_name_or_path", type=str, required=True)
     parser.add_argument("--dataset_name_or_path", type=str, required=True)
     parser.add_argument("--asr_model_name_or_path", type=str, default=None)
+    parser.add_argument("--prompt_template_path", type=str, default=None)
     parser.add_argument("--max_new_tokens", type=int, default=1)
     parser.add_argument(
         "--tensor_type", type=str, default="auto",
@@ -28,9 +29,10 @@ def main():
 
     system = MultimodalSystem(
         model_name_or_path=args.model_name_or_path,
-        asr_model_name_or_path=args.asr_model_name_or_path,
         dataset_name_or_path=args.dataset_name_or_path,
-        tensor_type=args.tensor_type
+        asr_model_name_or_path=args.asr_model_name_or_path,
+        prompt_template_path=args.prompt_template_path,
+        tensor_type=args.tensor_type,
     )
     system.evaluate(
         max_new_tokens=args.max_new_tokens,
