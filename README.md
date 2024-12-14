@@ -44,8 +44,16 @@ TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Ch
 ### 🌐 Web Interface with `interface.py`
 The `interface.py` script provides a graphical user interface (GUI) for interacting with the `TOCFL-MultiBench` system, allowing you to select models, datasets, and configurations, and to visualize results interactively.
 ```bash
-python interface.py --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json"
+python interface.py \
+  --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
+  --prompt_dir "prompt"
 ```
+#### Arguments
+- **`--dataset_name_or_path`** *(optional)*:  
+  Path to the dataset or dataset name to be evaluated. Defaults to `"TOCFL-MultiBench/TOCFL-MultiBench.json"`.  
+- **`--prompt_dir`** *(optional)*:  
+  Directory containing prompt templates for evaluation. Defaults to `"prompt"`.
+
 Unlike `experiment.py`, which requires rerunning for each configuration, `interface.py` allows dynamic adjustments via the **Load** button. Each **Evaluate** button click automatically creates a timestamped folder with the configuration and results.
 #### Output Structure
 ```
@@ -53,11 +61,6 @@ Unlike `experiment.py`, which requires rerunning for each configuration, `interf
 ├── config.json     # Experiment configuration
 └── results.json    # Evaluation results
 ```
-
-#### Arguments
-- **`--dataset_name_or_path`** *(optional)*:  
-  Path to the dataset or dataset name to be evaluated. Defaults to `"TOCFL-MultiBench/TOCFL-MultiBench.json"`.  
-
 
 ### 🗂️ Data Collection with `collector.py`
 The `collector.py` script is a manual data collection tool designed to organize collected data into a structured directory format.
@@ -81,13 +84,14 @@ TOCFL-MultiBench/
 The `experiment.py` script is designed to evaluate a multimodal system using the provided model, dataset, and optional configurations.
 ```bash
 python experiment.py \
-    --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
-    --model_name_or_path "Qwen/Qwen2-VL-7B-Instruct" \
-    --asr_model_name_or_path "openai/whisper-large-v3-turbo" \
-    --max_new_tokens 1 \
-    --tensor_type "auto" \
-    --decoding_strategy "greedy" \
-    --use_stcm
+  --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
+  --model_name_or_path "Qwen/Qwen2-VL-7B-Instruct" \
+  --asr_model_name_or_path "openai/whisper-large-v3-turbo" \
+  --prompt_template_path "prompt/base.txt" \
+  --max_new_tokens 1 \
+  --tensor_type "auto" \
+  --decoding_strategy "greedy" \
+  --use_stcm
 ```
 
 #### Arguments
@@ -100,14 +104,24 @@ python experiment.py \
 - **`--asr_model_name_or_path`** *(optional)*:  
   Path to the Automatic Speech Recognition (ASR) model or its name. Defaults to `None`.
 
+- **`--prompt_template_path`** *(optional)*:  
+  Path to a prompt template file. Defaults to `None`.
+
 - **`--max_new_tokens`** *(optional)*:  
   Maximum number of tokens to generate for each prediction. Defaults to `1`.
 
 - **`--tensor_type`** *(optional)*:  
-  Specifies the tensor type (e.g., `auto`, `bf16`, etc.). Defaults to `"auto"`.
+  Specifies the tensor type for computations.  
+  **Options**:  
+  `auto` | `fp16` | `bf16` | `int8` | `fp4` | `nf4`  
+  *(Default: `auto`)*
 
 - **`--decoding_strategy`** *(optional)*:  
-  Strategy for decoding model outputs (e.g., `greedy`, `beam_search`). Defaults to `"greedy"`.
+  Strategy for decoding model outputs.  
+  **Options**:  
+  `greedy` | `contrastive` | `sampling` | `beam_search` | `beam_search_sampling`  
+  `diverse_beam_search` | `self_speculative` | `dola_high` | `dola_low`  
+  *(Default: `greedy`)*
 
 - **`--use_stcm`** *(optional)*:  
   Flag to enable the use of Selective Token Constraint Mechanism (STCM). Set this flag to activate.
@@ -132,7 +146,7 @@ python experiment.py \
 | VLM + Random |              Qwen2-VL-7B-Instruct              |   8.29B    |  51.89   |  51.54   |   51.40   | 51.89  |
 | ALM + Random |            Qwen2-Audio-7B-Instruct             |   8.40B    |  35.22   |  31.03   |   35.59   | 35.22  |
 |  VLM + ALM   | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |   16.69B   |  52.33   |  57.84   |   66.95   | 52.33  |
-|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
+|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.11   |  79.16   |   79.97   | 79.11  |
 </details>
 
 #### Performance Comparison Across Different Models
@@ -147,7 +161,7 @@ python experiment.py \
 | LLaVA-NeXT-Mistral-7B + Whisper-Large-V3-Turbo  |   8.38B    |  41.00   |  38.25   |   55.63   | 41.00  |
 |      InternVL2-8B + Whisper-Large-V3-Turbo      |   8.89B    |  78.00   |  77.90   |   78.24   | 78.00  |
 |      MiniCPM-v2.6 + Whisper-Large-V3-Turbo      |   8.91B    |  75.78   |  75.76   |   75.88   | 75.78  |
-|  Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
+|  Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |   9.10B    |  79.11   |  79.16   |   79.97   | 79.11  |
 |      Idefics2-8B + Whisper-Large-V3-Turbo       |   9.21B    |  41.22   |  41.08   |   42.05   | 41.22  |
 |   MiniCPM-Llama3-2.5 + Whisper-Large-V3-Turbo   |   9.35B    |  63.89   |  63.85   |   64.40   | 63.89  |
 |     Paligemma2-10B + Whisper-Large-V3-Turbo     |   10.47B   |  24.33   |  24.72   |   25.63   | 24.33  |
@@ -160,9 +174,10 @@ python experiment.py \
 
 |                     Model                     |        Decoding Strategy         | Model Size | Accuracy  | F1 Score  | Precision |  Recall   |
 |:---------------------------------------------:|:--------------------------------:|:----------:|:---------:|:---------:|:---------:|:---------:|
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |          Greedy Search           |   9.10B    |   79.22   |   79.27   |   80.15   |   79.22   |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        Contrastive Search        |   9.10B    |   79.22   |   79.27   |   80.15   |   79.22   |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |       Multinomial Sampling       |   9.10B    |   79.22   |   79.27   |   80.15   |   79.22   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |          Greedy Search           |   9.10B    |   79.11   |   79.16   |   79.97   |   79.11   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        Greedy Search + STCM      |   9.10B    |   79.33   |   79.34   |   80.13   |   79.33   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        Contrastive Search        |   9.10B    |   79.11   |   79.16   |   79.97   |   79.11   |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |       Multinomial Sampling       |   9.10B    |   79.11   |   79.16   |   79.97   |   79.11   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |           Beam Search            |   9.10B    |   61.67   |   61.59   |   64.35   |   61.67   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo | Beam Search Multinomial Sampling |   9.10B    |   61.67   |   61.59   |   64.35   |   61.67   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |       Diverse Beam Search        |   9.10B    |   61.67   |   61.59   |   64.35   |   61.67   |
@@ -182,12 +197,12 @@ python experiment.py \
 |:------------:|:----------------------------------------------:|:----:|:----------:|:--------:|:--------:|:---------:|:------:|
 |     VLM      |              Qwen2-VL-7B-Instruct              |      |   8.29B    |  43.89   |  51.76   |   67.86   | 43.89  |
 |     ALM      |            Qwen2-Audio-7B-Instruct             |      |   8.40B    |  30.22   |  28.13   |   42.83   | 30.22  |
-| VLM + Random |              Qwen2-VL-7B-Instruct              |      |   8.29B    |  51.89   |  51.54   |   51.40   | 51.89  |
+| VLM + Random |              Qwen2-VL-7B-Instruct              |      |   8.29B    |  49.11   |  46.47   |   56.41   | 49.11  |
 | ALM + Random |            Qwen2-Audio-7B-Instruct             |      |   8.40B    |  35.22   |  31.03   |   35.59   | 35.22  |
 |     VLM      |              Qwen2-VL-7B-Instruct              |  ✅  |   8.29B    |  53.78   |  52.01   |   59.80   | 53.78  |
 |     ALM      |            Qwen2-Audio-7B-Instruct             |  ✅  |   8.40B    |  36.67   |  32.32   |   37.77   | 36.67  |
 |  VLM + ALM   | Qwen2-VL-7B-Instruct + Qwen2-Audio-7B-Instruct |      |   16.69B   |  52.33   |  57.84   |   66.95   | 52.33  |
-|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |      |   9.10B    |  79.22   |  79.27   |   80.15   | 79.22  |
+|  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |      |   9.10B    |  79.11   |  79.16   |   79.97   | 79.11  |
 |  VLM + ASR   | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo  |  ✅  |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
 
 </details>
@@ -198,14 +213,14 @@ python experiment.py \
 
 |                     Model                     | STCM | Model Size | Accuracy | F1 Score | Precision | Recall |
 |:---------------------------------------------:|:----:|:----------:|:--------:|:--------:|:---------:|:------:|
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |      |   10.47B   |  24.33%  |  24.72%  |  25.63%   | 24.33% |
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |  ✅  |   10.47B   |  27.89%  |  12.51%  |  25.08%   | 27.89% |
-|     Idefics2-8B + Whisper-Large-V3-Turbo      |      |   9.21B    |  41.22%  |  41.08%  |  42.05%   | 41.22% |
-|     Idefics2-8B + Whisper-Large-V3-Turbo      |  ✅  |   9.21B    |  42.33%  |  42.50%  |  43.26%   | 42.33% |
-| Llama-3.2-11B-Vision-Instruct + Whisper-Small |      |   10.94B   |  54.33%  |  53.78%  |  61.12%   | 54.33% |
-| Llama-3.2-11B-Vision-Instruct + Whisper-Small |  ✅  |   10.94B   |  55.44%  |  55.08%  |  64.79%   | 55.44% |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |      |   9.10B    |  79.22%  |  79.27%  |  80.15%   | 79.22% |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |  ✅  |   9.10B    |  79.33%  |  79.34%  |  80.13%   | 79.33% |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |      |   10.47B   |  24.33   |  24.72   |   25.63   | 24.33  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |  ✅  |   10.47B   |  27.89   |  12.51   |   25.08   | 27.89  |
+|     Idefics2-8B + Whisper-Large-V3-Turbo      |      |   9.21B    |  41.22   |  41.08   |   42.05   | 41.22  |
+|     Idefics2-8B + Whisper-Large-V3-Turbo      |  ✅  |   9.21B    |  42.33   |  42.50   |   43.26   | 42.33  |
+| Llama-3.2-11B-Vision-Instruct + Whisper-Small |      |   10.94B   |  54.33   |  53.78   |   61.12   | 54.33  |
+| Llama-3.2-11B-Vision-Instruct + Whisper-Small |  ✅  |   10.94B   |  55.44   |  55.08   |   64.79   | 55.44  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |      |   9.10B    |  79.11   |  79.16   |   79.97   | 79.11  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |  ✅  |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
 
 </details>
 
@@ -214,19 +229,39 @@ python experiment.py \
   <summary>Show/Hide Results Table</summary>
 
 |        Model         | Benchmark | STCM | Model Size | Accuracy | F1 Score | Precision | Recall |
-|:--------------------:|:---------:| ---- |:----------:|:--------:|:--------:|:---------:|:------:|
+|:--------------------:|:---------:|:----:|:----------:|:--------:|:--------:|:---------:|:------:|
 | Qwen2-VL-7B-Instruct | CII-Bench |      |   8.29B    |  48.89   |  48.19   |   53.77   | 48.89  |
-| Qwen2-VL-7B-Instruct | CII-Bench | ✅   |   8.29B    |  50.59   |  50.68   |   53.74   | 50.59  |
+| Qwen2-VL-7B-Instruct | CII-Bench |  ✅  |   8.29B    |  50.59   |  50.68   |   53.74   | 50.59  |
 | Qwen2-VL-7B-Instruct |  MMStar   |      |   8.29B    |  28.20   |  28.24   |   28.61   | 28.20  |
-| Qwen2-VL-7B-Instruct |  MMStar   | ✅   |   8.29B    |  54.87   |  55.05   |   56.11   | 54.87  |
+| Qwen2-VL-7B-Instruct |  MMStar   |  ✅  |   8.29B    |  54.87   |  55.05   |   56.11   | 54.87  |
 | Qwen2-VL-7B-Instruct |  MMBench  |      |   8.29B    |  54.51   |  54.30   |   54.90   | 54.51  |
-| Qwen2-VL-7B-Instruct |  MMBench  | ✅   |   8.29B    |  66.72   |  66.58   |   68.08   | 66.72  |
+| Qwen2-VL-7B-Instruct |  MMBench  |  ✅  |   8.29B    |  66.72   |  66.58   |   68.08   | 66.72  |
 |    Paligemma2-10B    | CII-Bench |      |   10.7B    |  19.35   |  13.14   |   17.27   | 19.35  |
-|    Paligemma2-10B    | CII-Bench | ✅   |   10.7B    |  19.35   |  16.19   |   24.75   | 19.35  |
+|    Paligemma2-10B    | CII-Bench |  ✅  |   10.7B    |  19.35   |  16.19   |   24.75   | 19.35  |
 |    Paligemma2-10B    |  MMStar   |      |   10.7B    |  26.67   |  26.84   |   27.16   | 26.67  |
-|    Paligemma2-10B    |  MMStar   | ✅   |   10.7B    |  32.27   |  29.34   |   31.65   | 32.27  |
+|    Paligemma2-10B    |  MMStar   |  ✅  |   10.7B    |  32.27   |  29.34   |   31.65   | 32.27  |
 |    Paligemma2-10B    |  MMBench  |      |   10.7B    |   27.3   |  27.04   |   27.48   |  27.3  |
-|    Paligemma2-10B    |  MMBench  | ✅   |   10.7B    |  28.24   |  20.81   |   38.91   | 28.24  |
+|    Paligemma2-10B    |  MMBench  |  ✅  |   10.7B    |  28.24   |  20.81   |   38.91   | 28.24  |
+
+</details>
+
+#### Performance Comparison Across Probability Stacking Counts
+<details>
+  <summary>Show/Hide Results Table</summary>
+
+|                     Model                     | Probability Stack Count | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:---------------------------------------------:|:-----------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            1            |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            2            |   9.10B    |  62.78   |  62.85   |   71.18   | 62.78  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            3            |   9.10B    |  55.44   |  52.98   |   63.18   | 55.44  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            4            |   9.10B    |  51.22   |  47.61   |   56.00   | 51.22  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            5            |   9.10B    |  49.33   |  45.24   |   59.47   | 49.33  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            1            |   10.47B   |  27.89   |  12.51   |   25.08   | 27.89  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            2            |   10.47B   |  29.22   |  16.26   |   20.00   | 29.22  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            3            |   10.47B   |  29.44   |  15.50   |   35.81   | 29.44  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            4            |   10.47B   |  28.56   |  15.49   |   45.31   | 28.56  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            5            |   10.47B   |  27.44   |  20.39   |   46.16   | 27.44  |
+
 </details>
 
 ## 🙏 Acknowledgements

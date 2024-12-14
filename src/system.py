@@ -177,19 +177,20 @@ class MultimodalSystem:
         self.stcm = STCM(allowed_tokens=self.all_choices, tokenizer=self.processor.tokenizer)
         df = pd.DataFrame(
             {
-                "Model": [self.model_name_or_path],
-                "ASR Model": [self.asr_model_name_or_path],
-                "Dataset": [self.dataset_name_or_path],
-                "Prompt": [self.prompt_template_path],
                 "Tensor type": [self.tensor_type],
-                "Dataset size": [len(self.dataset)],
+                "Model": [self.model_name_or_path],
                 "Model size": [
                     f"{sum(p.numel() for p in self.model.parameters()) / 1e9:.2f}B"
                 ] if not self.is_lmdeploy_model else [None],
+                "ASR Model": [self.asr_model_name_or_path],
                 "ASR Model size": [
                     f"{sum(p.numel() for p in self.asr_model.model.parameters()) / 1e9:.2f}B"
                     if self.asr_model is not None else "0B"
                 ],
+                "Dataset": [self.dataset_name_or_path],
+                "Dataset size": [len(self.dataset)],
+                "Prompt": [self.prompt_template_path],
+                "Prompt Template": [ self.prompt_template],
             }
         )
         print(tabulate(df, headers="keys", tablefmt="pretty", showindex=False))
