@@ -1,6 +1,6 @@
 """interface"""
+import argparse
 from pathlib import Path
-from argparse import ArgumentParser
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -8,15 +8,31 @@ from dotenv import load_dotenv
 from src import MultimodalSystem
 
 
+def parse_args() -> argparse.Namespace:
+    """parse_args"""
+    parser = argparse.ArgumentParser(description="Interface")
+    parser.add_argument(
+        "--dataset_name_or_path", 
+        type=str,
+        default="TOCFL-MultiBench/TOCFL-MultiBench.json",
+        help=(
+            "Path to the dataset or dataset name to be evaluated. "
+            "Defaults to 'TOCFL-MultiBench/TOCFL-MultiBench.json'."
+        )
+    )
+    parser.add_argument(
+        "--prompt_dir", 
+        type=str,
+        default="prompt",
+        help="Directory containing prompt templates for evaluation. Defaults to 'prompt'."
+    )
+    return parser.parse_args()
 
 def main() -> None:
     """main"""
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--dataset_name_or_path", type=str, default="TOCFL-MultiBench/TOCFL-MultiBench.json"
-    )
-    parser.add_argument("--prompt_dir", type=str, default="prompt")
-    args = parser.parse_args()
+    load_dotenv()
+
+    args = parse_args()
 
     model_options = [
         "Qwen/Qwen2-VL-7B-Instruct",
@@ -88,6 +104,7 @@ def main() -> None:
             label="Select Tensor Type",
             value=tensor_type_options[0]
         )
+
         load_button = gr.Button("Load")
         load_output = gr.Dataframe(label="Load")
         load_button.click(
@@ -130,5 +147,4 @@ def main() -> None:
     interface.launch(share=True)
 
 if __name__ == "__main__":
-    load_dotenv()
     main()
