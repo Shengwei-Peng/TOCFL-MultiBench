@@ -72,18 +72,8 @@ class MultimodalSystem:
     ) -> pd.DataFrame:
         """load"""
 
-        if prompt_template_path != self.prompt_template_path and prompt_template_path is not None:
-            self.prompt_template_path = prompt_template_path
-            try:
-                with Path(prompt_template_path).open("r", encoding="utf-8") as file:
-                    self.prompt_template = file.read()
-            except (FileNotFoundError, IOError) as e:
-                raise RuntimeError(f"Failed to load the prompt template: {e}") from e
-        elif prompt_template_path is None:
-            self.prompt_template = "{question}"
-
         if model_name_or_path != self.model_name_or_path or tensor_type != self.tensor_type:
-            self._clear_resources(model_name_or_path)
+            self._clear_resources("model")
             self.tensor_type = tensor_type
             self.model_name_or_path = model_name_or_path
             self.is_audio_language_model = "Audio" in self.model_name_or_path
@@ -128,7 +118,7 @@ class MultimodalSystem:
         if asr_model_name_or_path is not None and (
             asr_model_name_or_path != self.asr_model_name_or_path or tensor_type != self.tensor_type
         ):
-            self._clear_resources(asr_model_name_or_path)
+            self._clear_resources("asr_model")
             self.tensor_type = tensor_type
             self.asr_model_name_or_path = asr_model_name_or_path
             asr_model = AutoModelForSpeechSeq2Seq.from_pretrained(
@@ -146,7 +136,21 @@ class MultimodalSystem:
         elif asr_model_name_or_path is None:
             self.asr_model = None
 
-        if dataset_name_or_path != self.dataset_name_or_path:
+        if (
+            prompt_template_path != self.prompt_template_path
+            or dataset_name_or_path != self.dataset_name_or_path
+        ):
+            self.prompt_template_path = prompt_template_path
+
+            if prompt_template_path is not None:
+                try:
+                    with Path(prompt_template_path).open("r", encoding="utf-8") as file:
+                        self.prompt_template = file.read()
+                except (FileNotFoundError, IOError) as e:
+                    raise RuntimeError(f"Failed to load the prompt template: {e}") from e
+            else:
+                self.prompt_template = "{question}"
+
             self.dataset_name_or_path = dataset_name_or_path
 
             if self.dataset_name_or_path == "m-a-p/CII-Bench":
