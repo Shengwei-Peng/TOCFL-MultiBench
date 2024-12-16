@@ -63,7 +63,7 @@ python experiment.py \
   --asr_model_name_or_path "openai/whisper-large-v3-turbo" \
   --prompt_template_path "prompt/base.txt" \
   --max_new_tokens 1 \
-  --tensor_type "auto" \
+  --tensor_type "bf16" \
   --decoding_strategy "dola_low" \
   --use_stcm
 ```
@@ -197,7 +197,7 @@ TOCFL-MultiBench/
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |         Self-Speculative         |   9.10B    |   79.67   |   79.69   |   80.48   |   79.67   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |           DoLa (High)            |   9.10B    |   58.11   |   58.18   |   68.29   |   58.11   |
 | Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            DoLa (Low)            |   9.10B    |   79.89   |   79.85   |   80.91   |   79.89   |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        DoLa (Low) + STCM         |   9.10B    | **80.22** | **80.18** | **81.24** | **80.22** |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |        DoLa (Low) + STCM         |   9.10B    | **80.33** | **80.31** | **81.24** | **80.33** |
 </details>
 
 ### ✨ Selective Token Constraint Mechanism (STCM)

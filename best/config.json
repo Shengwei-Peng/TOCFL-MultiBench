@@ -1,5 +1,5 @@
 {
-    "tensor_type": "auto",
+    "tensor_type": "bf16",
     "model_name_or_path": "Qwen/Qwen2-VL-7B-Instruct",
     "asr_model_name_or_path": "openai/whisper-large-v3-turbo",
     "dataset_name_or_path": "TOCFL-MultiBench/TOCFL-MultiBench.json",
@@ -7,10 +7,10 @@
     "decoding_strategy": "dola_low",
     "use_stcm": true,
     "total_examples": 900,
-    "runtime": 757.253687620163,
+    "runtime": 751.0689558982849,
     "prompt_template": "{question}\n僅輸出正確答案的字母，格式必須為 'A', 'B', 'C', 'D'，輸出限制為單個字母，無需解釋。\n",
-    "accuracy": 0.8022222222222222,
-    "f1_score": 0.8017576881894691,
-    "precision": 0.8124322071602295,
-    "recall": 0.8022222222222222
+    "accuracy": 0.8033333333333333,
+    "f1_score": 0.8031088654465975,
+    "precision": 0.8123831652638583,
+    "recall": 0.8033333333333333
 }

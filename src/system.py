@@ -489,11 +489,6 @@ class MultimodalSystem:
 
     def _get_model_config(self, tensor_type: str) -> dict:
         model_config = {}
-        if (
-            tensor_type in ["fp16", "bf16"] and not self.is_audio_language_model
-            and "meta-llama" not in self.model_name_or_path
-        ):
-            model_config["attn_implementation"] = "flash_attention_2"
 
         dtype_mapping = {"fp16": torch.float16, "bf16": torch.bfloat16}
         model_config["torch_dtype"] = dtype_mapping.get(tensor_type, "auto")
