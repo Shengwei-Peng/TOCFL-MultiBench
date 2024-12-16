@@ -14,10 +14,9 @@ TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Ch
 ### Steps
 
 1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/Shengwei-Peng/TOCFL-MultiBench.git
-   ```
+    ```bash
+    git clone https://github.com/Shengwei-Peng/TOCFL-MultiBench.git
+    ```
 
 2. Navigate to the project directory:
     ```sh
@@ -29,59 +28,34 @@ TOCFL-MultiBench is a comprehensive multimodal benchmark designed to evaluate Ch
     pip install -r requirements.txt
     ```
 
-3. Download the TOCFL-MultiBench and place it in the appropriate directory. You can either:
+4. Download the TOCFL-MultiBench and place it in the appropriate directory. You can either:
+    - Download it manually from [this link](https://drive.google.com/file/d/1hspOJO9e5-m_0GFU84RKmzx9Np8RRZrA/view?usp=drive_link)  
+    - Or use `gdown`:
 
-   - Download it manually from [this link](https://drive.google.com/file/d/1hspOJO9e5-m_0GFU84RKmzx9Np8RRZrA/view?usp=drive_link)  
-   - Or use `gdown`:
+      ```bash
+      pip install gdown
+      gdown https://drive.google.com/uc?id=1hspOJO9e5-m_0GFU84RKmzx9Np8RRZrA
+      unzip TOCFL-MultiBench.zip
+      ```
 
-     ```bash
-     pip install gdown
-     gdown https://drive.google.com/uc?id=1hspOJO9e5-m_0GFU84RKmzx9Np8RRZrA
-     ```
+5. Create a `.env` file and add your `HUGGINGFACE_TOKEN`:
+    ```bash
+    echo "HUGGINGFACE_TOKEN=your_huggingface_token_here" > .env
+    ```
+    Replace `your_huggingface_token_here` with your actual token from Hugging Face. If you don’t have one, you can create an account on [Hugging Face](https://huggingface.co/) and generate a token in your user settings.
 
 ## 🛠️ Usage
 
-### 🌐 Web Interface with `interface.py`
-The `interface.py` script provides a graphical user interface (GUI) for interacting with the `TOCFL-MultiBench` system, allowing you to select models, datasets, and configurations, and to visualize results interactively.
-```bash
-python interface.py \
-  --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
-  --prompt_dir "prompt"
-```
-#### Arguments
-- **`--dataset_name_or_path`** *(optional)*:  
-  Path to the dataset or dataset name to be evaluated. Defaults to `"TOCFL-MultiBench/TOCFL-MultiBench.json"`.  
-- **`--prompt_dir`** *(optional)*:  
-  Directory containing prompt templates for evaluation. Defaults to `"prompt"`.
-
-Unlike `experiment.py`, which requires rerunning for each configuration, `interface.py` allows dynamic adjustments via the **Load** button. Each **Evaluate** button click automatically creates a timestamped folder with the configuration and results.
-#### Output Structure
-```
-20241218_235900/    # Timestamped directory
-├── config.json     # Experiment configuration
-└── results.json    # Evaluation results
-```
-
-### 🗂️ Data Collection with `collector.py`
-The `collector.py` script is a manual data collection tool designed to organize collected data into a structured directory format.
-```bash
-python collector.py --dataset_dir "TOCFL-MultiBench"
-```
-
-#### Arguments
-- **`--dataset_dir`** *(optional)*:  
-  Path to the root directory where the collected data will be stored. Defaults to `"TOCFL-MultiBench"`.  
-
-#### Output Structure
-```
-TOCFL-MultiBench/
-├── audios/                  # Audio files
-├── images/                  # Image files
-└── TOCFL-MultiBench.json    # Metadata and labels
-```
-
 ### 🧪 Experiment with `experiment.py`
 The `experiment.py` script is designed to evaluate a multimodal system using the provided model, dataset, and optional configurations.
+```bash
+python experiment.py \
+  --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
+  --model_name_or_path "Qwen/Qwen2-VL-7B-Instruct"
+```
+
+#### 🏆 Reproducing Best Results
+To reproduce the best results as shown in the `best/` directory of the repository, execute the following command using the specific configurations:
 ```bash
 python experiment.py \
   --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
@@ -90,7 +64,7 @@ python experiment.py \
   --prompt_template_path "prompt/base.txt" \
   --max_new_tokens 1 \
   --tensor_type "auto" \
-  --decoding_strategy "greedy" \
+  --decoding_strategy "dola_low" \
   --use_stcm
 ```
 
@@ -131,6 +105,45 @@ python experiment.py \
 20241218_235900/    # Timestamped directory
 ├── config.json     # Experiment configuration
 └── results.json    # Evaluation results
+```
+
+### 🌐 Web Interface with `interface.py`
+The `interface.py` script provides a graphical user interface (GUI) for interacting with the `TOCFL-MultiBench` system, allowing you to select models, datasets, and configurations, and to visualize results interactively.
+```bash
+python interface.py \
+  --dataset_name_or_path "TOCFL-MultiBench/TOCFL-MultiBench.json" \
+  --prompt_dir "prompt"
+```
+#### Arguments
+- **`--dataset_name_or_path`** *(optional)*:  
+  Path to the dataset or dataset name to be evaluated. Defaults to `"TOCFL-MultiBench/TOCFL-MultiBench.json"`.  
+- **`--prompt_dir`** *(optional)*:  
+  Directory containing prompt templates for evaluation. Defaults to `"prompt"`.
+
+Unlike `experiment.py`, which requires rerunning for each configuration, `interface.py` allows dynamic adjustments via the **Load** button. Each **Evaluate** button click automatically creates a timestamped folder with the configuration and results.
+#### Output Structure
+```
+20241218_235900/    # Timestamped directory
+├── config.json     # Experiment configuration
+└── results.json    # Evaluation results
+```
+
+### 🗂️ Data Collection with `collector.py`
+The `collector.py` script is a manual data collection tool designed to organize collected data into a structured directory format.
+```bash
+python collector.py --dataset_dir "TOCFL-MultiBench"
+```
+
+#### Arguments
+- **`--dataset_dir`** *(optional)*:  
+  Path to the root directory where the collected data will be stored. Defaults to `"TOCFL-MultiBench"`.  
+
+#### Output Structure
+```
+TOCFL-MultiBench/
+├── audios/                  # Audio files
+├── images/                  # Image files
+└── TOCFL-MultiBench.json    # Metadata and labels
 ```
 
 ## 📊 Results
@@ -224,6 +237,25 @@ python experiment.py \
 
 </details>
 
+#### Performance Comparison Across Probability Stacking Counts
+<details>
+  <summary>Show/Hide Results Table</summary>
+
+|                     Model                     | Probability Stack Count | Model Size | Accuracy | F1 Score | Precision | Recall |
+|:---------------------------------------------:|:-----------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            1            |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            2            |   9.10B    |  62.78   |  62.85   |   71.18   | 62.78  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            3            |   9.10B    |  55.44   |  52.98   |   63.18   | 55.44  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            4            |   9.10B    |  51.22   |  47.61   |   56.00   | 51.22  |
+| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            5            |   9.10B    |  49.33   |  45.24   |   59.47   | 49.33  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            1            |   10.47B   |  27.89   |  12.51   |   25.08   | 27.89  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            2            |   10.47B   |  29.22   |  16.26   |   20.00   | 29.22  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            3            |   10.47B   |  29.44   |  15.50   |   35.81   | 29.44  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            4            |   10.47B   |  28.56   |  15.49   |   45.31   | 28.56  |
+|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            5            |   10.47B   |  27.44   |  20.39   |   46.16   | 27.44  |
+
+</details>
+
 #### Performance Comparison with and without STCM Across Benchmarks
 <details>
   <summary>Show/Hide Results Table</summary>
@@ -242,25 +274,6 @@ python experiment.py \
 |    Paligemma2-10B    |  MMStar   |  ✅  |   10.7B    |  32.27   |  29.34   |   31.65   | 32.27  |
 |    Paligemma2-10B    |  MMBench  |      |   10.7B    |   27.3   |  27.04   |   27.48   |  27.3  |
 |    Paligemma2-10B    |  MMBench  |  ✅  |   10.7B    |  28.24   |  20.81   |   38.91   | 28.24  |
-
-</details>
-
-#### Performance Comparison Across Probability Stacking Counts
-<details>
-  <summary>Show/Hide Results Table</summary>
-
-|                     Model                     | Probability Stack Count | Model Size | Accuracy | F1 Score | Precision | Recall |
-|:---------------------------------------------:|:-----------------------:|:----------:|:--------:|:--------:|:---------:|:------:|
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            1            |   9.10B    |  79.33   |  79.34   |   80.13   | 79.33  |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            2            |   9.10B    |  62.78   |  62.85   |   71.18   | 62.78  |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            3            |   9.10B    |  55.44   |  52.98   |   63.18   | 55.44  |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            4            |   9.10B    |  51.22   |  47.61   |   56.00   | 51.22  |
-| Qwen2-VL-7B-Instruct + Whisper-Large-V3-Turbo |            5            |   9.10B    |  49.33   |  45.24   |   59.47   | 49.33  |
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            1            |   10.47B   |  27.89   |  12.51   |   25.08   | 27.89  |
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            2            |   10.47B   |  29.22   |  16.26   |   20.00   | 29.22  |
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            3            |   10.47B   |  29.44   |  15.50   |   35.81   | 29.44  |
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            4            |   10.47B   |  28.56   |  15.49   |   45.31   | 28.56  |
-|    Paligemma2-10B + Whisper-Large-V3-Turbo    |            5            |   10.47B   |  27.44   |  20.39   |   46.16   | 27.44  |
 
 </details>
 
