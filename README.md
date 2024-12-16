@@ -286,12 +286,13 @@ We would like to express our gratitude to the following organizations for their 
 
 ## 🤝 Contributing
 
-We welcome contributions to the project! Please follow the guidelines below:
+We welcome contributions to the project! Please follow the guidelines outlined in [CONTRIBUTING.md](CONTRIBUTING.md):
 
 1. Fork the repository.
 2. Create a new branch (`feature/your-feature-name`).
 3. Commit your changes.
 4. Submit a pull request.
+
 
 ## ⚖️ License
 
